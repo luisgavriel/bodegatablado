@@ -583,6 +583,22 @@ function enlazar() {
   });
 }
 
+// Cuando se publica una versión nueva, el service worker nuevo toma el control
+// y la página se recarga una vez para usarla, sin tener que forzar la recarga.
+function registrarServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  const habiaVersion = !!navigator.serviceWorker.controller;
+  let recargada = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!habiaVersion || recargada) return;
+    recargada = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" })
+    .then((reg) => reg.update())
+    .catch(() => {});
+}
+
 async function iniciar() {
   enlazar();
   try {
@@ -597,7 +613,7 @@ async function iniciar() {
   $("#aviso-demo").hidden = store.modo !== "local";
   store.onAuth((u) => mostrar(u));
   await mostrar(await store.usuario());
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  registrarServiceWorker();
 }
 
 iniciar();

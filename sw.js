@@ -1,11 +1,12 @@
 // Guarda la app en caché para que abra rápido y sin conexión.
 // Los datos de Supabase siempre se piden a la red.
-const CACHE = "bodega-v11";
+const CACHE = "bodega-v12";
 const FILES = ["./", "index.html", "styles.css", "app.js", "store.js", "normalizar.js", "normalizar-worker.js", "config.js",
   "vinos-iniciales.json", "manifest.webmanifest", "vendor/supabase.js", "icon.svg", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)));
+  // "reload" salta la caché HTTP del navegador para no guardar versiones viejas.
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: "reload" })))));
   self.skipWaiting();
 });
 
