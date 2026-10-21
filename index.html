@@ -22,6 +22,11 @@
     <symbol id="i-menu" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.9" fill="currentColor"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><circle cx="19" cy="12" r="1.9" fill="currentColor"/></symbol>
     <symbol id="i-buscar" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" fill="none"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
     <symbol id="i-orden" viewBox="0 0 24 24"><path d="M7 4v16m0 0-3-3m3 3 3-3M17 20V4m0 0-3 3m3-3 3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-lista" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="4.5" cy="6" r="1.4" fill="currentColor"/><circle cx="4.5" cy="12" r="1.4" fill="currentColor"/><circle cx="4.5" cy="18" r="1.4" fill="currentColor"/></symbol>
+    <symbol id="i-galeria" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2" fill="none"/><rect x="13" y="4" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2" fill="none"/><rect x="4" y="13" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2" fill="none"/><rect x="13" y="13" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+    <symbol id="i-cerrar" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></symbol>
+    <symbol id="i-editar" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><path d="m13.5 6.5 4 4" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-copa" viewBox="0 0 24 24"><path d="M7 3h10v4a5 5 0 0 1-10 0z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><path d="M12 12v8M8 21h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
     <symbol id="i-reloj" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
   </svg>
   <div class="wrap">
@@ -81,6 +86,10 @@
             <button class="chip" type="button" data-filter="guardar" aria-pressed="false">Guardar <span class="num"></span></button>
             <button class="chip" type="button" data-filter="agotados" aria-pressed="false">Agotados <span class="num"></span></button>
           </nav>
+          <div class="vistas" role="group" aria-label="Vista">
+            <button class="vista" type="button" data-vista="lista" aria-pressed="true" aria-label="Lista" title="Lista"><svg aria-hidden="true"><use href="#i-lista"/></svg></button>
+            <button class="vista" type="button" data-vista="galeria" aria-pressed="false" aria-label="Galería" title="Galería"><svg aria-hidden="true"><use href="#i-galeria"/></svg></button>
+          </div>
           <label class="orden">
             <svg aria-hidden="true"><use href="#i-orden"/></svg>
             <select id="orden" aria-label="Ordenar">
@@ -96,6 +105,10 @@
       <div id="lista"></div>
     </main>
   </div>
+
+  <button class="fab" id="btn-fab" type="button" aria-label="Añadir vino" hidden><svg aria-hidden="true"><use href="#i-mas"/></svg></button>
+
+  <dialog id="ficha" class="ficha" aria-label="Ficha del vino" tabindex="-1"></dialog>
 
   <dialog id="dlg">
     <form id="form-vino" method="dialog">
