@@ -179,6 +179,79 @@ function ponerFoto(id, imagen_url) {
   return v;
 }
 
+function botonesFoto(v) {
+  const igualada = estaNormalizada(v?.imagen_url);
+  $("#btn-quitar-fondo").hidden = !v?.imagen_url || igualada;
+  $("#btn-volver-original").hidden = !igualada;
+}
+
+// Quita el fondo de la foto del vino abierto y enseña el resultado antes de guardarlo.
+async function quitarFondo() {
+  const vino = editando;
+  const estado = $("#fotos-estado");
+  estado.textContent = "Quitando el fondo… (la primera vez tarda en descargar la herramienta)";
+  try {
+    const blob = await normalizar(vino.imagen_url, { progreso: (msg) => (estado.textContent = msg) });
+    const vista = URL.createObjectURL(blob);
+    $("#foto-actual").innerHTML = `<img class="norm" src="${vista}" alt="">`;
+    estado.textContent = "¿Te gusta así?";
+    $("#candidatas").innerHTML = `<div class="decidir">
+      <button class="btn primary" type="button" data-si>Guardar así</button>
+      <button class="btn ghost" type="button" data-no>Dejar la original</button></div>`;
+    $("#candidatas").onclick = async (e) => {
+      if (e.target.closest("[data-no]")) {
+        $("#candidatas").innerHTML = "";
+        pintarFotoActual(vino);
+        estado.textContent = "";
+        return;
+      }
+      if (!e.target.closest("[data-si]")) return;
+      estado.textContent = "Guardando…";
+      try {
+        pintarFotoActual(ponerFoto(vino.id, await store.fotos.subir(vino.id, blob)));
+        $("#candidatas").innerHTML = "";
+        botonesFoto(vinos.find((x) => x.id === vino.id));
+        render();
+        estado.textContent = "Guardada. La original se conserva por si quieres volver a ella.";
+      } catch (err) { estado.textContent = "No se pudo guardar: " + err.message; }
+    };
+  } catch (err) {
+    pintarFotoActual(vino);
+    estado.textContent = "No se pudo quitar el fondo: " + err.message;
+  }
+}
+
+async function volverOriginal() {
+  const vino = editando;
+  const estado = $("#fotos-estado");
+  estado.textContent = "Recuperando la original…";
+  try {
+    pintarFotoActual(ponerFoto(vino.id, await store.fotos.original(vino.id)));
+    botonesFoto(vinos.find((x) => x.id === vino.id));
+    render();
+    estado.textContent = "Has vuelto a la foto original.";
+  } catch (err) { estado.textContent = err.message; }
+}
+
+// Deshace todas las fotos igualadas. Las igualadas antes de que se guardara la
+// original (primera versión) ya no la tienen: para esas se busca una foto nueva.
+async function recuperarOriginales() {
+  const pendientes = vinos.filter((v) => estaNormalizada(v.imagen_url));
+  if (!pendientes.length) return toast("No hay fotos igualadas");
+  const fallos = [];
+  for (const [i, v] of pendientes.entries()) {
+    toast(`Recuperando fotos… ${i + 1} de ${pendientes.length}`, true);
+    try {
+      ponerFoto(v.id, await store.fotos.original(v.id));
+    } catch {
+      try { ponerFoto(v.id, await store.fotos.auto(v.id)); } catch (err) { fallos.push(`${v.nombre}: ${err.message}`); }
+    }
+    render();
+  }
+  toast(`${pendientes.length - fallos.length} fotos recuperadas`);
+  if (fallos.length) avisar(`Sin recuperar (${fallos.length}): ` + fallos.join(" · "));
+}
+
 async function buscarFotos() {
   const vino = editando;
   const estado = $("#fotos-estado");
@@ -202,10 +275,8 @@ async function buscarFotos() {
         pintarFotoActual(ponerFoto(vino.id, url));
         $("#candidatas").innerHTML = "";
         render();
-        estado.textContent = "Quitando el fondo…";
-        const error = await igualarFoto(vinos.find((x) => x.id === vino.id), (msg) => (estado.textContent = msg));
-        pintarFotoActual(vinos.find((x) => x.id === vino.id));
-        estado.textContent = error ? "Foto guardada sin quitar el fondo: " + error : "Foto guardada.";
+        botonesFoto(vinos.find((x) => x.id === vino.id));
+        estado.textContent = "Foto guardada.";
       } catch (err) { estado.textContent = "No se pudo guardar: " + err.message; }
     };
   } catch (err) {
@@ -214,12 +285,10 @@ async function buscarFotos() {
 }
 
 // Devuelve null si ha guardado la foto, o el mensaje de error.
-async function fotoAutomatica(id, progreso) {
+async function fotoAutomatica(id) {
   try {
-    const v = ponerFoto(id, await store.fotos.auto(id));
+    ponerFoto(id, await store.fotos.auto(id));
     render();
-    // Si no se puede quitar el fondo, se queda la foto original.
-    await igualarFoto(v, progreso);
     return null;
   } catch (err) {
     console.warn("Sin foto para", id, err);
@@ -241,7 +310,7 @@ async function fotosQueFaltan() {
   for (const [i, v] of pendientes.entries()) {
     const paso = `Buscando fotos… ${i + 1} de ${pendientes.length} · ${hechas} guardadas`;
     toast(paso, true);
-    const error = await fotoAutomatica(v.id, (msg) => toast(`${paso} · ${msg}`, true));
+    const error = await fotoAutomatica(v.id);
     if (error) fallos.push(`${v.nombre}: ${error}`);
     else hechas++;
     // Si las tres primeras fallan, el problema es de configuración: parar y enseñarlo.
@@ -269,6 +338,7 @@ function abrirDialogo(vino) {
   $("#candidatas").innerHTML = "";
   $("#fotos-estado").textContent = "";
   if (vino) pintarFotoActual(vino);
+  botonesFoto(vino);
   $("#dlg").showModal();
 }
 
@@ -434,6 +504,7 @@ async function mostrar(usuario) {
   $("#btn-compartir").hidden = !store.miembros || ajena;
   $("#btn-fotos-todas").hidden = !store.fotos || soloVer();
   $("#btn-igualar").hidden = !store.fotos || soloVer();
+  $("#btn-recuperar").hidden = !store.fotos || soloVer();
   $("#btn-importar").hidden = soloVer();
   $("#btn-cargar-iniciales").hidden = ajena;
   try {
@@ -487,6 +558,9 @@ function enlazar() {
   $("#btn-exportar").addEventListener("click", exportar);
   $("#btn-fotos-todas").addEventListener("click", fotosQueFaltan);
   $("#btn-igualar").addEventListener("click", igualarTodas);
+  $("#btn-recuperar").addEventListener("click", recuperarOriginales);
+  $("#btn-quitar-fondo").addEventListener("click", quitarFondo);
+  $("#btn-volver-original").addEventListener("click", volverOriginal);
   $("#btn-buscar-fotos").addEventListener("click", buscarFotos);
   $("#btn-importar").addEventListener("click", () => $("#file-importar").click());
   $("#file-importar").addEventListener("change", (e) => {

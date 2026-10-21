@@ -4,8 +4,9 @@
 // POST { accion: "buscar", vino_id }        → { candidatas: [{ url, miniatura, titulo }] }
 // POST { accion: "guardar", vino_id, url }  → { imagen_url }
 // POST { accion: "auto", vino_id }          → { imagen_url } (busca y guarda la primera que se pueda descargar)
-// POST { accion: "subir", vino_id, datos, tipo } → { imagen_url } (foto ya normalizada en el navegador,
+// POST { accion: "subir", vino_id, datos, tipo } → { imagen_url } (foto ya igualada en el navegador,
 //                                               en base64; tipo image/webp o image/png)
+// POST { accion: "original", vino_id }      → { imagen_url } (deshace la igualada)
 //
 // Secretos necesarios: BRAVE_API_KEY. Las claves de Supabase las pone
 // Supabase automáticamente.
@@ -79,26 +80,62 @@ async function descargar(url: string): Promise<{ bytes: Uint8Array; tipo: string
 
 async function guardar(admin: ReturnType<typeof createClient>, vino: Vino, url: string) {
   const { bytes, tipo } = await descargar(url);
-  return guardarBytes(admin, vino, bytes, tipo, "");
+  return guardarBytes(admin, vino, bytes, tipo);
 }
 
-// sufijo "-n" marca las fotos normalizadas (sin fondo, lienzo 300×900).
-async function guardarBytes(
-  admin: ReturnType<typeof createClient>, vino: Vino, bytes: Uint8Array, tipo: string, sufijo: string,
-) {
-  const ruta = `${vino.user_id}/${vino.id}-${Date.now()}${sufijo}.${EXTENSIONES[tipo]}`;
-  const subida = await admin.storage.from("fotos").upload(ruta, bytes, { contentType: tipo, upsert: true });
-  if (subida.error) throw subida.error;
-  const imagen_url = admin.storage.from("fotos").getPublicUrl(ruta).data.publicUrl;
+// Las fotos igualadas (sin fondo, lienzo 300×900) se guardan junto a la
+// original con el mismo nombre más "-n.webp": "abc.jpg" → "abc.jpg-n.webp".
+// Así la original nunca se pierde y se puede volver a ella.
+const MARCA = "/storage/v1/object/public/fotos/";
+const IGUALADA = /-n\.(webp|png)$/;
+const rutaDe = (url: string | null) => (url?.includes(MARCA) ? url.split(MARCA)[1].split("?")[0] : null);
 
+async function ponerUrl(admin: ReturnType<typeof createClient>, vino: Vino, ruta: string, consulta = "") {
+  const imagen_url = admin.storage.from("fotos").getPublicUrl(ruta).data.publicUrl + consulta;
   const act = await admin.from("vinos").update({ imagen_url }).eq("id", vino.id);
   if (act.error) throw act.error;
+  return imagen_url;
+}
 
-  // Borra la foto anterior si era nuestra.
-  const marca = "/storage/v1/object/public/fotos/";
-  if (vino.imagen_url?.includes(marca)) {
-    await admin.storage.from("fotos").remove([vino.imagen_url.split(marca)[1]]);
+// Foto original nueva: sustituye a la anterior (y a su versión igualada).
+async function guardarBytes(admin: ReturnType<typeof createClient>, vino: Vino, bytes: Uint8Array, tipo: string) {
+  const ruta = `${vino.user_id}/${vino.id}-${Date.now()}.${EXTENSIONES[tipo]}`;
+  const subida = await admin.storage.from("fotos").upload(ruta, bytes, { contentType: tipo, upsert: true });
+  if (subida.error) throw subida.error;
+  const imagen_url = await ponerUrl(admin, vino, ruta);
+
+  const anterior = rutaDe(vino.imagen_url);
+  if (anterior) {
+    const borrar = [anterior];
+    if (IGUALADA.test(anterior)) borrar.push(anterior.replace(IGUALADA, ""));
+    await admin.storage.from("fotos").remove(borrar);
   }
+  return imagen_url;
+}
+
+// Versión igualada de la foto actual; la original se conserva.
+async function guardarIgualada(admin: ReturnType<typeof createClient>, vino: Vino, bytes: Uint8Array, tipo: string) {
+  const actual = rutaDe(vino.imagen_url);
+  if (!actual) throw new Error("Este vino no tiene una foto guardada");
+  const original = actual.replace(IGUALADA, "");
+  const ruta = `${original}-n.${EXTENSIONES[tipo]}`;
+  const subida = await admin.storage.from("fotos").upload(ruta, bytes, { contentType: tipo, upsert: true });
+  if (subida.error) throw subida.error;
+  // Cache-busting: la ruta se repite si se iguala dos veces.
+  return ponerUrl(admin, vino, ruta, `?v=${Date.now()}`);
+}
+
+// Vuelve a la foto original y borra la igualada.
+async function volverAOriginal(admin: ReturnType<typeof createClient>, vino: Vino) {
+  const actual = rutaDe(vino.imagen_url);
+  if (!actual || !IGUALADA.test(actual)) throw new Error("Esta foto no está igualada");
+  const original = actual.replace(IGUALADA, "");
+  const carpeta = original.slice(0, original.lastIndexOf("/"));
+  const nombre = original.slice(original.lastIndexOf("/") + 1);
+  const { data: hay } = await admin.storage.from("fotos").list(carpeta, { search: nombre });
+  if (!hay?.some((f: { name: string }) => f.name === nombre)) throw new Error("La foto original ya no existe; busca otra foto");
+  const imagen_url = await ponerUrl(admin, vino, original);
+  await admin.storage.from("fotos").remove([actual]);
   return imagen_url;
 }
 
@@ -143,8 +180,10 @@ Deno.serve(async (req) => {
         return respuesta({ error: "Imagen vacía o demasiado grande" }, 400);
       }
       const bytes = Uint8Array.from(atob(datos), (c) => c.charCodeAt(0));
-      return respuesta({ imagen_url: await guardarBytes(admin, vino, bytes, tipo, "-n") });
+      return respuesta({ imagen_url: await guardarIgualada(admin, vino, bytes, tipo) });
     }
+
+    if (accion === "original") return respuesta({ imagen_url: await volverAOriginal(admin, vino) });
 
     if (accion === "auto") {
       const candidatas = await buscar(vino);

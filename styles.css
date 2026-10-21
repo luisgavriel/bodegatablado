@@ -208,6 +208,8 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .fotos-acciones { display: grid; gap: 6px; justify-items: start; }
 .candidatas { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
 .candidatas:empty { display: none; }
+.candidatas .decidir { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+.fotos-acciones { grid-auto-flow: row; }
 .candidata { padding: 4px; height: 120px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; cursor: pointer; display: grid; place-items: center; }
 .candidata img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .candidata:hover, .candidata:focus-visible { border-color: var(--accent); outline: 2px solid var(--accent); }

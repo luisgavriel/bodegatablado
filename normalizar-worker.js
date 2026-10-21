@@ -22,7 +22,7 @@ self.onmessage = async ({ data: { id, url } }) => {
     // La descarga avisa por partes; se muestra el total acumulado.
     const partes = new Map();
     const sinFondo = await removeBackground(original, {
-      model: "isnet_quint8",
+      model: "isnet_fp16", // el pequeño (quint8) deja demasiados restos
       device: "cpu",
       output: { format: "image/png" },
       progress: (clave, actual, total) => {

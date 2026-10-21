@@ -48,11 +48,15 @@ y en el menú ⋯, *Buscar las fotos que faltan*. Sin foto se muestra una botell
 
 ## Fotos uniformes
 
-Cada foto guardada se iguala en el navegador (`normalizar.js`): se le quita el fondo con
-[@imgly/background-removal](https://github.com/imgly/background-removal-js) (modelo pequeño, unos 40 MB que se
-descargan la primera vez y quedan en caché), se recorta y se centra en un lienzo transparente de 300×900, y se
-sube como WebP con la acción `subir` de `buscar-imagen` (archivos acabados en `-n.webp`). En el menú ⋯,
-*Igualar todas las fotos* procesa las que ya estaban guardadas. Si algo falla, el vino conserva la foto original.
+En la ficha de cada vino, *Quitar el fondo* iguala la foto en el navegador (`normalizar.js` y
+`normalizar-worker.js`): quita el fondo con [@imgly/background-removal](https://github.com/imgly/background-removal-js)
+(modelo `isnet_fp16`, unos 80 MB que se descargan la primera vez y quedan en caché), recorta la botella ignorando
+restos sueltos, la centra en un lienzo transparente de 300×900 y enseña el resultado antes de guardarlo. Si el
+recorte no parece una botella, no se guarda. La versión igualada se sube junto a la original
+(`foto.jpg` → `foto.jpg-n.webp`), así que *Volver a la original* siempre funciona.
+
+En el menú ⋯: *Igualar todas las fotos* hace lo mismo con todas, sin vista previa, y *Recuperar las fotos
+originales* deshace todas las igualadas.
 
 ## Compartir la bodega
 
