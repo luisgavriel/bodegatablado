@@ -58,6 +58,20 @@ recorte no parece una botella, no se guarda. La versión igualada se sube junto 
 En el menú ⋯: *Igualar todas las fotos* hace lo mismo con todas, sin vista previa, y *Recuperar las fotos
 originales* deshace todas las igualadas.
 
+## Rellenar un vino con una foto de la etiqueta
+
+En *Añadir vino*, *Rellenar con una foto de la etiqueta* manda la foto (reducida a 1200 px) a la función
+`supabase/functions/reconocer-vino`, que se la pasa a Claude Opus 5.5 con visión. Claude devuelve nombre,
+bodega, tipo, añada, denominación, país y uvas, y sugiere cuándo beberlo, la ventana y una nota de cata. La
+app rellena el formulario, marca los campos sugeridos y no guarda nada hasta que pulsas *Guardar*.
+Cuesta alrededor de 1 céntimo por foto.
+
+1. En https://console.anthropic.com crea una cuenta, carga crédito (*Billing*) y crea una clave en *API Keys*.
+2. *Edge Functions → Deploy a new function → Via Editor*: nombre `reconocer-vino`, pega `index.ts` y despliega.
+3. *Edge Functions → Secrets*: añade `ANTHROPIC_API_KEY` con tu clave.
+
+Si Opus rechaza una foto, la API la repite sola con otro modelo de Claude (`fallbacks: "default"`).
+
 ## Compartir la bodega
 
 En Supabase, *SQL Editor*: pega `supabase/compartir.sql` y pulsa *Run*. Después, en la app, menú ⋯ →

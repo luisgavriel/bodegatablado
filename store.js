@@ -12,6 +12,15 @@ function limpiar(vino) {
   return out;
 }
 
+function aBase64(blob) {
+  return new Promise((ok, mal) => {
+    const lector = new FileReader();
+    lector.onload = () => ok(String(lector.result).split(",")[1]);
+    lector.onerror = () => mal(lector.error);
+    lector.readAsDataURL(blob);
+  });
+}
+
 export async function vinosIniciales() {
   const res = await fetch("vinos-iniciales.json");
   return res.json();
@@ -29,6 +38,16 @@ async function crearStoreSupabase() {
   // "dueno" (la suya), "editor" o "lector" (la de otra persona que le ha
   // dado acceso desde Compartir).
   let acceso = null;
+
+  async function invocar(funcion, body) {
+    const { data, error } = await sb.functions.invoke(funcion, { body });
+    if (error) {
+      let msg = error.message;
+      try { msg = (await error.context.json()).error || msg; } catch { /* sin cuerpo */ }
+      throw new Error(msg);
+    }
+    return data;
+  }
 
   return {
     modo: "nube",
@@ -77,27 +96,20 @@ async function crearStoreSupabase() {
     },
     async borrar(id) { check(await sb.from("vinos").delete().eq("id", id)); },
     fotos: {
-      async llamar(body) {
-        const { data, error } = await sb.functions.invoke("buscar-imagen", { body });
-        if (error) {
-          let msg = error.message;
-          try { msg = (await error.context.json()).error || msg; } catch { /* sin cuerpo */ }
-          throw new Error(msg);
-        }
-        return data;
-      },
+      llamar(body) { return invocar("buscar-imagen", body); },
       async buscar(id) { return (await this.llamar({ accion: "buscar", vino_id: id })).candidatas; },
       async guardar(id, url) { return (await this.llamar({ accion: "guardar", vino_id: id, url })).imagen_url; },
       async auto(id) { return (await this.llamar({ accion: "auto", vino_id: id })).imagen_url; },
       async original(id) { return (await this.llamar({ accion: "original", vino_id: id })).imagen_url; },
       async subir(id, blob) {
-        const datos = await new Promise((ok, mal) => {
-          const lector = new FileReader();
-          lector.onload = () => ok(String(lector.result).split(",")[1]);
-          lector.onerror = () => mal(lector.error);
-          lector.readAsDataURL(blob);
-        });
+        const datos = await aBase64(blob);
         return (await this.llamar({ accion: "subir", vino_id: id, datos, tipo: blob.type })).imagen_url;
+      },
+    },
+    // Lee la foto de una etiqueta con Claude: { vino: {...campos}, aviso }.
+    etiqueta: {
+      async leer(blob) {
+        return invocar("reconocer-vino", { imagen: await aBase64(blob), tipo: blob.type, dueno: acceso.dueno });
       },
     },
   };
@@ -123,6 +135,7 @@ function crearStoreLocal() {
     modo: "local",
     fotos: null,
     miembros: null,
+    etiqueta: null,
     async acceso() { return { rol: "dueno" }; },
     async usuario() { return { email: null }; },
     onAuth() {},

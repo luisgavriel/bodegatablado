@@ -332,6 +332,9 @@ function abrirDialogo(vino) {
   $("#btn-borrar").hidden = !vino;
   if (vino) for (const el of f.elements) if (el.name) el.value = vino[el.name] ?? "";
   $("#fotos-bloque").hidden = !vino || !store.fotos || soloVer();
+  $("#etiqueta-bloque").hidden = !!vino || !store.etiqueta || soloVer();
+  $("#etiqueta-estado").textContent = "";
+  for (const el of f.querySelectorAll(".sugerido")) el.classList.remove("sugerido");
   for (const el of f.elements) if (el.name) el.disabled = soloVer();
   $("#btn-guardar").hidden = soloVer();
   if (soloVer()) $("#btn-borrar").hidden = true;
@@ -340,6 +343,44 @@ function abrirDialogo(vino) {
   if (vino) pintarFotoActual(vino);
   botonesFoto(vino);
   $("#dlg").showModal();
+}
+
+// Reduce la foto (lado mayor 1200 px, JPEG) para que suba rápido y cueste menos.
+async function reducirFoto(file) {
+  let bmp;
+  try { bmp = await createImageBitmap(file); } catch {
+    throw new Error("Este navegador no puede abrir esa foto. Prueba con una en JPEG.");
+  }
+  const escala = Math.min(1, 1200 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * escala);
+  c.height = Math.round(bmp.height * escala);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close();
+  return new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.85));
+}
+
+async function leerEtiqueta(file) {
+  const estado = $("#etiqueta-estado");
+  const boton = $("#btn-etiqueta");
+  boton.disabled = true;
+  estado.textContent = "Claude está leyendo la etiqueta… (unos segundos)";
+  try {
+    const { vino, aviso } = await store.etiqueta.leer(await reducirFoto(file));
+    const f = $("#form-vino");
+    for (const [k, valor] of Object.entries(vino)) {
+      const el = f.elements[k];
+      if (!el || valor === null || valor === "") continue;
+      el.value = valor;
+      el.classList.add("sugerido");
+    }
+    estado.textContent = "Revisa los datos antes de guardar. La cata, la ventana y cuándo beber son sugerencias de Claude."
+      + (aviso ? " Ojo: " + aviso : "");
+  } catch (err) {
+    estado.textContent = "No se pudo leer: " + (err.message || err);
+  } finally {
+    boton.disabled = false;
+  }
 }
 
 function leerFormulario() {
@@ -562,6 +603,12 @@ function enlazar() {
   $("#btn-quitar-fondo").addEventListener("click", quitarFondo);
   $("#btn-volver-original").addEventListener("click", volverOriginal);
   $("#btn-buscar-fotos").addEventListener("click", buscarFotos);
+  $("#btn-etiqueta").addEventListener("click", () => $("#file-etiqueta").click());
+  $("#file-etiqueta").addEventListener("change", (e) => {
+    if (e.target.files[0]) leerEtiqueta(e.target.files[0]);
+    e.target.value = "";
+  });
+  $("#form-vino").addEventListener("input", (e) => e.target.classList.remove("sugerido"));
   $("#btn-importar").addEventListener("click", () => $("#file-importar").click());
   $("#file-importar").addEventListener("change", (e) => {
     if (e.target.files[0]) importar(e.target.files[0]);

@@ -85,6 +85,11 @@
   <dialog id="dlg">
     <form id="form-vino" method="dialog">
       <h2 id="dlg-titulo">Vino</h2>
+      <div class="etiqueta-bloque" id="etiqueta-bloque" hidden>
+        <button class="btn primary" type="button" id="btn-etiqueta">Rellenar con una foto de la etiqueta</button>
+        <input type="file" id="file-etiqueta" accept="image/*" hidden>
+        <p class="meta" id="etiqueta-estado" role="status"></p>
+      </div>
       <div class="fotos-bloque" id="fotos-bloque" hidden>
         <div class="foto-grande" id="foto-actual"></div>
         <div class="fotos-acciones">
