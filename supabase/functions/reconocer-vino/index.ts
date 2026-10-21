@@ -52,10 +52,9 @@ const ESQUEMA = {
     ventana_hasta: texto("Último año recomendado para beberlo (4 cifras); vacío si no se sabe"),
     cata: texto("Nota de cata orientativa de 1 o 2 frases sobre el estilo habitual de este vino; vacío si no lo conoces"),
     puntuacion_etiqueta: texto("Puntuaciones o medallas que se leen en la foto (pegatinas, collarines), p. ej. «Parker 95 · Peñín 93»; vacío si no hay"),
-    puntuacion_estimada: texto("Si la foto no muestra puntuaciones: las de críticos que recuerdes para este vino y añada, p. ej. «Parker 94 · Peñín 92»; vacío si no las conoces con razonable seguridad"),
     aviso: texto("Qué no se lee bien o qué conviene revisar, en una frase; vacío si todo está claro"),
   },
-  required: ["es_vino", "nombre", "bodega", "tipo", "anada", "denominacion", "pais", "uvas", "ventana_desde", "ventana_hasta", "cata", "puntuacion_etiqueta", "puntuacion_estimada", "aviso"],
+  required: ["es_vino", "nombre", "bodega", "tipo", "anada", "denominacion", "pais", "uvas", "ventana_desde", "ventana_hasta", "cata", "puntuacion_etiqueta", "aviso"],
   additionalProperties: false,
 };
 
@@ -66,8 +65,8 @@ Lo que se lee en la etiqueta es lo importante: cópialo con fidelidad. Para lo q
 si no, déjalo vacío. No inventes la añada: si no se ve, vacía.
 La cata y la ventana de consumo son sugerencias orientativas: dalas solo si conoces el vino
 o su estilo, teniendo en cuenta la añada y que hoy es ${new Date().getFullYear()}.
-Las puntuaciones que no se leen en la foto pueden ser erróneas: da solo las que recuerdes con
-razonable seguridad para esa añada.`;
+En puntuacion_etiqueta pon solo las notas que se lean en la foto: las demás las busca la app en la web
+después de guardar.`;
 
 // Cuándo beber según la ventana (la misma regla que ventana.js en la app):
 // urg si ya terminó, ya si termina este año o el siguiente, guardar si aún
@@ -134,14 +133,13 @@ Deno.serve(async (req) => {
     const datos = JSON.parse(bloque.text);
     if (!datos.es_vino) return respuesta({ error: "No parece la etiqueta de un vino. Prueba con otra foto." }, 422);
 
-    const { es_vino: _, aviso, ventana_desde, ventana_hasta, puntuacion_etiqueta, puntuacion_estimada, ...vino } = datos;
+    const { es_vino: _, aviso, ventana_desde, ventana_hasta, puntuacion_etiqueta, ...vino } = datos;
     let desde = ano(ventana_desde);
     const hasta = ano(ventana_hasta);
     if (desde && hasta && desde > hasta) desde = null;
     const ventana = desde && hasta ? (desde === hasta ? `${desde}` : `${desde}–${hasta}`)
       : hasta ? `hasta ${hasta}` : desde ? `desde ${desde}` : "";
-    const puntuacion = puntuacion_etiqueta
-      || (puntuacion_estimada ? `≈ ${puntuacion_estimada} (aprox., según Claude)` : "");
+    const puntuacion = puntuacion_etiqueta;
     return respuesta({
       vino: {
         ...vino,

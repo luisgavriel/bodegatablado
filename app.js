@@ -20,6 +20,7 @@ let busqueda = "";
 let orden = "tipo";
 let editando = null;
 let fichaId = null;
+const buscandoNotas = new Set();
 // Lista o galería. Se recuerda en este navegador; sin preferencia, galería
 // en pantallas anchas y lista en el móvil.
 let vista = (() => {
@@ -221,6 +222,7 @@ function pintarFicha() {
         ${v.uvas ? `<p class="meta uvas">${esc(v.uvas)}</p>` : ""}
         ${ventana || puntos ? `<p class="eval">${ventana ? `<span class="win ${esc(v.estado ?? "")}">${esc(ventana)}</span>` : ""}${puntos}</p>` : ""}
         ${lineaHtml(v)}
+        ${notasHtml(v)}
         ${v.cata ? `<div class="ficha-bloque"><h3>Nota de cata</h3><p class="cata">${esc(v.cata)}</p></div>` : ""}
         ${v.notas ? `<div class="ficha-bloque"><h3>Notas</h3><p>${esc(v.notas)}</p></div>` : ""}
       </div>
@@ -235,6 +237,38 @@ function pintarFicha() {
         <button class="btn primary abrir" type="button" data-abrir ${v.botellas === 0 ? "disabled" : ""}><svg aria-hidden="true"><use href="#i-copa"/></svg>Abrir una</button>
       </div>
     </div>`;
+}
+
+// Fuentes de las puntuaciones (enlaces) y botón para volver a buscarlas.
+function notasHtml(v) {
+  const fuentes = Array.isArray(v.puntuacion_fuentes) ? v.puntuacion_fuentes.filter((f) => /^https?:\/\//.test(f.url)) : [];
+  const puede = store.puntuaciones && !soloVer();
+  if (!fuentes.length && !puede) return "";
+  const buscando = buscandoNotas.has(v.id);
+  return `<div class="ficha-bloque notas-fuentes"><h3>Puntuaciones</h3>
+    ${fuentes.length ? `<p class="meta">${fuentes.map((f) =>
+      `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.fuente)} ${esc(f.nota)}</a>`).join(" · ")}</p>` : ""}
+    ${puede ? `<button class="btn ghost" type="button" data-puntuaciones ${buscando ? "disabled" : ""}>${
+      buscando ? "Buscando puntuaciones…" : "Buscar puntuaciones en la web"}</button>` : ""}
+  </div>`;
+}
+
+// Busca las notas de guías y Vivino de un vino (tarda entre 30 s y 2 min).
+async function buscarPuntuaciones(id) {
+  if (buscandoNotas.has(id)) return;
+  buscandoNotas.add(id);
+  if (fichaId === id) pintarFicha();
+  try {
+    const { vino, encontradas } = await store.puntuaciones.buscar(id);
+    vinos = vinos.map((x) => (x.id === vino.id ? vino : x));
+    toast(encontradas ? `${vino.nombre}: ${encontradas} ${encontradas === 1 ? "puntuación" : "puntuaciones"} encontradas`
+      : `${vino.nombre}: no hay puntuaciones publicadas de esta añada`);
+  } catch (err) {
+    toast("No se pudieron buscar las puntuaciones: " + (err.message || err));
+  } finally {
+    buscandoNotas.delete(id);
+    render();
+  }
 }
 
 function abrirFicha(v) {
@@ -539,7 +573,7 @@ async function leerEtiqueta(file) {
       el.value = valor;
       el.classList.add("sugerido");
     }
-    estado.textContent = "Revisa los datos antes de guardar. La cata, la ventana y cuándo beber son sugerencias de Claude."
+    estado.textContent = "Revisa los datos antes de guardar. La cata, la ventana y cuándo beber son sugerencias de Claude. Al guardar, la app busca sus puntuaciones en la web."
       + (aviso ? " Ojo: " + aviso : "");
   } catch (err) {
     estado.textContent = "No se pudo leer: " + (err.message || err);
@@ -568,6 +602,7 @@ async function guardar(e) {
       const nuevo = await store.crear(datos);
       vinos.push(nuevo);
       if (store.fotos) fotoAutomatica(nuevo.id).then((e) => e && toast("Sin foto: " + e));
+      if (store.puntuaciones) buscarPuntuaciones(nuevo.id);
     }
     $("#dlg").close();
     render();
@@ -788,6 +823,7 @@ function enlazar() {
       return toast(v.botellas ? `Salud. ${v.botellas === 1 ? "Queda 1 botella" : `Quedan ${v.botellas} botellas`}` : "Salud. Era la última botella");
     }
     if (e.target.closest("[data-editar]")) { ficha.close(); abrirDialogo(v); }
+    if (e.target.closest("[data-puntuaciones]")) buscarPuntuaciones(v.id);
   });
   ficha.addEventListener("close", () => { fichaId = null; });
   // En el móvil, arrastrar el panel hacia abajo lo cierra.

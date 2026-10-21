@@ -63,7 +63,7 @@ originales* deshace todas las igualadas.
 En *Añadir vino*, *Rellenar con una foto de la etiqueta* manda la foto (reducida a 1200 px) a la función
 `supabase/functions/reconocer-vino`, que se la pasa a Claude Opus 5.5 con visión. Claude devuelve nombre,
 bodega, tipo, añada, denominación, país y uvas, y sugiere la ventana de consumo, una nota de cata y la
-puntuación (la de la etiqueta si se ve; si no, la que recuerde marcada como «≈ … (aprox., según Claude)»). La
+puntuación si se lee en la etiqueta. La
 app rellena el formulario, marca los campos sugeridos y no guarda nada hasta que pulsas *Guardar*.
 Cuesta alrededor de 1 céntimo por foto.
 
@@ -72,6 +72,19 @@ Cuesta alrededor de 1 céntimo por foto.
 3. *Edge Functions → Secrets*: añade `ANTHROPIC_API_KEY` con tu clave.
 
 Si Opus rechaza una foto, la API la repite sola con otro modelo de Claude (`fallbacks: "default"`).
+
+## Puntuaciones automáticas
+
+Al guardar un vino nuevo, la función `supabase/functions/buscar-puntuaciones` pide a Claude Opus 5.5 que busque
+en la web (búsqueda y lectura de páginas de la API de Claude) las notas de guías y críticos y la de Vivino.
+Solo se aceptan notas de esa añada y con la página de origen; el texto queda como
+`Suckling 93 · Peñín 92 · Vivino 4,2/5` y las URLs, en la columna `puntuacion_fuentes`, que la ficha enseña como
+enlaces. En la ficha, *Buscar puntuaciones en la web* repite la búsqueda para cualquier vino. Tarda entre
+medio minuto y dos minutos y cuesta unos 15–30 céntimos por vino.
+
+1. *SQL Editor*: pega `supabase/puntuacion-fuentes.sql` y pulsa *Run*.
+2. *Edge Functions → Deploy a new function → Via Editor*: nombre `buscar-puntuaciones`, pega `index.ts` y despliega
+   (usa el mismo secreto `ANTHROPIC_API_KEY`).
 
 ## Cuándo beber
 

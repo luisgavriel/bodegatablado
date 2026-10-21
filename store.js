@@ -106,6 +106,10 @@ async function crearStoreSupabase() {
         return (await this.llamar({ accion: "subir", vino_id: id, datos, tipo: blob.type })).imagen_url;
       },
     },
+    // Busca en la web las notas de guías y Vivino y las guarda: { vino, encontradas }.
+    puntuaciones: {
+      buscar(id) { return invocar("buscar-puntuaciones", { vino_id: id }); },
+    },
     // Lee la foto de una etiqueta con Claude: { vino: {...campos}, aviso }.
     etiqueta: {
       async leer(blob) {
@@ -136,6 +140,7 @@ function crearStoreLocal() {
     fotos: null,
     miembros: null,
     etiqueta: null,
+    puntuaciones: null,
     async acceso() { return { rol: "dueno" }; },
     async usuario() { return { email: null }; },
     onAuth() {},

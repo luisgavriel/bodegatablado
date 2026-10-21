@@ -414,6 +414,8 @@ dialog.ficha {
 .ficha-bloque { margin-top: 14px; display: grid; gap: 4px; }
 .ficha-bloque h3 { margin: 0; font: 600 11.5px var(--font-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .ficha-bloque p { margin: 0; }
+.notas-fuentes { justify-items: start; }
+.notas-fuentes a { color: inherit; text-underline-offset: 2px; }
 .ficha .cata { font: italic 17px/1.5 var(--font-display); }
 .ficha-acciones {
   position: sticky; bottom: calc(-1 * max(20px, env(safe-area-inset-bottom)));
