@@ -1,6 +1,6 @@
 // Guarda la app en caché para que abra rápido y sin conexión.
 // Los datos de Supabase siempre se piden a la red.
-const CACHE = "bodega-v6";
+const CACHE = "bodega-v7";
 const FILES = ["./", "index.html", "styles.css", "app.js", "store.js", "config.js",
   "vinos-iniciales.json", "manifest.webmanifest", "vendor/supabase.js", "icon.svg", "icon-192.png", "icon-512.png"];
 

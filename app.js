@@ -18,12 +18,13 @@ let busqueda = "";
 let orden = "tipo";
 let editando = null;
 
-function toast(msg) {
+// fijo = true deja el mensaje en pantalla hasta el siguiente toast.
+function toast(msg, fijo = false) {
   const t = $("#toast");
   t.textContent = msg;
   t.hidden = false;
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => (t.hidden = true), 2500);
+  if (!fijo) toast.timer = setTimeout(() => (t.hidden = true), 4000);
 }
 
 function fallo(e) {
@@ -193,12 +194,13 @@ async function fotosQueFaltan() {
   let hechas = 0;
   const fallos = [];
   for (const [i, v] of pendientes.entries()) {
-    toast(`Buscando fotos… ${i + 1} de ${pendientes.length}`);
+    toast(`Buscando fotos… ${i + 1} de ${pendientes.length} · ${hechas} guardadas`, true);
     const error = await fotoAutomatica(v.id);
     if (error) fallos.push(`${v.nombre}: ${error}`);
     else hechas++;
     // Si las tres primeras fallan, el problema es de configuración: parar y enseñarlo.
     if (!hechas && fallos.length === 3) {
+      toast("No se pudo buscar fotos");
       return avisar("No se pudo buscar fotos. Error: " + error);
     }
   }
