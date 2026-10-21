@@ -5,9 +5,26 @@
 // POST { accion: "guardar", vino_id, url }  → { imagen_url }
 // POST { accion: "auto", vino_id }          → { imagen_url } (busca y guarda la primera que se pueda descargar)
 //
-// Secretos necesarios: BRAVE_API_KEY. SUPABASE_URL, SUPABASE_ANON_KEY y
-// SUPABASE_SERVICE_ROLE_KEY los pone Supabase automáticamente.
+// Secretos necesarios: BRAVE_API_KEY. Las claves de Supabase las pone
+// Supabase automáticamente.
+//
+// Despliégala con "Verify JWT" desactivado: la propia función comprueba la
+// sesión del usuario (auth.getUser) y las políticas RLS limitan qué vinos
+// puede tocar. La comprobación de la plataforma solo entiende las claves
+// antiguas y puede rechazar proyectos con las claves nuevas.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+
+// Las claves nuevas llegan como JSON con nombre; las antiguas, como texto.
+function clave(nueva: string, antigua: string): string {
+  try {
+    const k = JSON.parse(Deno.env.get(nueva) ?? "{}").default;
+    if (k) return k;
+  } catch { /* sin claves nuevas */ }
+  return Deno.env.get(antigua) ?? "";
+}
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const CLAVE_PUBLICA = clave("SUPABASE_PUBLISHABLE_KEYS", "SUPABASE_ANON_KEY");
+const CLAVE_SECRETA = clave("SUPABASE_SECRET_KEYS", "SUPABASE_SERVICE_ROLE_KEY");
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -82,14 +99,18 @@ Deno.serve(async (req) => {
 
     // Cliente con la sesión del usuario: las políticas RLS garantizan que
     // solo puede tocar sus propios vinos.
-    const usuario = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
+    const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+    const usuario = createClient(SUPABASE_URL, CLAVE_PUBLICA, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
     });
+    const { data: sesion, error: errSesion } = await usuario.auth.getUser(token);
+    if (errSesion || !sesion.user) return respuesta({ error: "Tienes que iniciar sesión" }, 401);
+
     const { data: vino, error } = await usuario.from("vinos")
       .select("id, user_id, nombre, bodega, anada, imagen_url").eq("id", vino_id).single();
     if (error || !vino) return respuesta({ error: "Vino no encontrado" }, 404);
 
-    const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const admin = createClient(SUPABASE_URL, CLAVE_SECRETA);
 
     if (accion === "buscar") return respuesta({ candidatas: await buscar(vino) });
 

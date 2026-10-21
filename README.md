@@ -40,7 +40,7 @@ y guarda la elegida en la carpeta pública `fotos` de Supabase Storage.
 
 1. Crea una clave en https://api-dashboard.search.brave.com (plan *Search*, gratis con verificación por tarjeta).
 2. En Supabase, *SQL Editor*: pega `supabase/fotos.sql` y pulsa *Run*.
-3. *Edge Functions → Deploy a new function → Via Editor*: nombre `buscar-imagen`, pega `index.ts` y despliega.
+3. *Edge Functions → Deploy a new function → Via Editor*: nombre `buscar-imagen`, pega `index.ts`, desactiva *Verify JWT* y despliega.
 4. *Edge Functions → Secrets*: añade `BRAVE_API_KEY` con tu clave.
 
 En la app: al añadir un vino se busca su foto sola; en la ficha de cada vino, *Buscar otra foto*;
