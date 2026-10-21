@@ -1,6 +1,6 @@
 import { crearStore, vinosIniciales } from "./store.js";
 import { normalizar, estaNormalizada } from "./normalizar.js";
-import { estadoSegunVentana } from "./ventana.js";
+import { estadoSegunVentana, leerVentana } from "./ventana.js";
 
 const TIPOS = [
   ["tinto", "Tintos"], ["blanco", "Blancos"], ["espumoso", "Espumosos"],
@@ -37,12 +37,24 @@ function fallo(e) {
 }
 
 // ---- Render ----
-function pasaFiltro(v) {
-  if (filtro === "agotados") return v.botellas === 0;
-  if (filtro === "ya") return v.estado === "ya" || v.estado === "urg";
-  if (filtro === "guardar") return v.estado === "guardar";
-  if (filtro !== "todo") return v.tipo === filtro;
+function pasaFiltro(v, f = filtro) {
+  if (f === "agotados") return v.botellas === 0;
+  if (f === "ya") return v.estado === "ya" || v.estado === "urg";
+  if (f === "guardar") return v.estado === "guardar";
+  if (f !== "todo") return v.tipo === f;
   return true;
+}
+
+function elegirFiltro(f) {
+  filtro = f;
+  const nav = $("#filtros");
+  for (const c of nav.querySelectorAll(".chip")) {
+    const activo = c.dataset.filter === f;
+    c.setAttribute("aria-pressed", String(activo));
+    // En el móvil los filtros se deslizan: deja el elegido a la vista.
+    if (activo && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = c.offsetLeft - nav.offsetLeft - 8;
+  }
+  render();
 }
 
 function pasaBusqueda(v) {
@@ -72,40 +84,98 @@ function botella(v) {
   </svg>`;
 }
 
+// La puntuación es texto libre («Peñín 92 · Vivino 3,9/5»). Cada trozo se
+// pinta según lo que sea: nota de un crítico sobre 100 como sello, Vivino
+// con estrellas y el resto tal cual. «Sin puntuación…» no se muestra.
+function puntuacionHtml(texto) {
+  return String(texto ?? "").split(/\s+·\s+/).map((trozo) => {
+    const t = trozo.trim();
+    if (!t || /^(aún )?sin puntuación/i.test(t)) return "";
+    const viv = t.match(/^Vivino\s+(\d)[,.](\d)\s*\/\s*5\s*(.*)$/i);
+    if (viv) {
+      const nota = Number(`${viv[1]}.${viv[2]}`);
+      const llenas = Math.round(nota);
+      return `<span class="vivino" title="${esc(t)}"><span class="st" aria-hidden="true">${"★".repeat(llenas)}${"☆".repeat(5 - llenas)}</span><b>${viv[1]},${viv[2]}</b> Vivino</span>`;
+    }
+    const critico = t.match(/^([\p{Lu}][\p{L}.' ]{1,24}?)\s+(\d{2,3}(?:[–-]\d{2,3})?\+?)(?:\/100)?(\s.*)?$/u);
+    if (critico && !/\d/.test(critico[1])) {
+      return `<span class="sello" title="${esc(t)}"><b>${esc(critico[2])}</b><span>${esc(critico[1])}</span></span>`;
+    }
+    return `<span class="score">${esc(t)}</span>`;
+  }).join("");
+}
+
+// Línea de tiempo de la ventana de consumo: de la añada (o el inicio de la
+// ventana) al final de la ventana, con el tramo bueno y la marca de hoy.
+function lineaHtml(v) {
+  const w = leerVentana(v.ventana);
+  if (!w) return "";
+  const ahora = new Date();
+  const ano = ahora.getFullYear();
+  const hoy = ano + (ahora - new Date(ano, 0, 1)) / (365.25 * 864e5);
+  const fin = w.hasta ?? Math.max(w.desde + 8, ano + 3);
+  const inicio = Math.min(v.anada ?? w.desde ?? ano, w.desde ?? Infinity, ano, fin);
+  const total = Math.max(fin + 1, hoy) - inicio;
+  const pos = (x) => `${(((x - inicio) / total) * 100).toFixed(1)}%`;
+  const desde = w.desde ?? inicio;
+  // Años bajo la barra: el inicio, el comienzo de la ventana si cae en medio y el final.
+  const ejes = [[inicio, inicio, "ini"]];
+  if (w.desde > inicio && w.desde < fin) ejes.push([w.desde, w.desde, ""]);
+  if (fin > inicio) ejes.push([fin, fin + 1, "fin"]);
+  return `<div class="linea ${esc(v.estado ?? "")}" aria-hidden="true">
+    <div class="barra">
+      <span class="tramo${w.hasta == null ? " abierto" : ""}" style="left:${pos(desde)};width:calc(${pos(fin + 1)} - ${pos(desde)})"></span>
+      <span class="hoy" style="left:${pos(hoy)}" title="Hoy"></span>
+    </div>
+    <div class="ejes">${ejes.map(([a, x, clase]) => `<span class="${clase}" style="left:${pos(x)}">${a}</span>`).join("")}</div>
+  </div>`;
+}
+
 function filaVino(v) {
   const meta = [v.bodega, v.denominacion, v.pais].filter(Boolean).join(" · ");
   const ventana = v.estado ? `${ESTADOS[v.estado]}${v.ventana ? " · " + v.ventana : ""}` : v.ventana;
+  const puntos = puntuacionHtml(v.puntuacion);
   return `
     <li class="wine${v.botellas === 0 ? " agotado" : ""}" data-id="${v.id}">
       <div class="foto ${esc(v.tipo)}">${imagen(v)}</div>
       <div class="main" data-editar>
         <p class="name">${esc(v.nombre)}<span class="anada">${v.anada ?? "s/a"}</span></p>
         ${meta ? `<p class="meta">${esc(meta)}</p>` : ""}
-        ${v.uvas ? `<p class="meta">${esc(v.uvas)}</p>` : ""}
-        ${ventana || v.puntuacion ? `<p class="eval">
-          ${v.puntuacion ? `<span class="score">${esc(v.puntuacion)}</span>` : ""}
+        ${v.uvas ? `<p class="meta uvas">${esc(v.uvas)}</p>` : ""}
+        ${ventana || puntos ? `<p class="eval">
           ${ventana ? `<span class="win ${esc(v.estado ?? "")}">${esc(ventana)}</span>` : ""}
+          ${puntos}
         </p>` : ""}
+        ${v.botellas > 0 ? lineaHtml(v) : ""}
       </div>
       <div class="stock-col"><div class="stock">
         <button class="step" type="button" data-delta="-1" aria-label="Quitar una botella" ${v.botellas === 0 ? "disabled" : ""}>−</button>
-        <span class="n" aria-label="${v.botellas} botellas">${v.botellas}</span>
+        <span class="n" aria-label="${v.botellas} ${v.botellas === 1 ? "botella" : "botellas"}">${v.botellas}</span>
         <button class="step" type="button" data-delta="1" aria-label="Añadir una botella">+</button>
-      </div>
-      <span class="stock-lbl">${v.botellas === 1 ? "botella" : "botellas"}</span></div>
+      </div></div>
     </li>`;
 }
 
 function render() {
   const enStock = vinos.filter((v) => v.botellas > 0);
   const botellas = (lista) => lista.reduce((s, v) => s + v.botellas, 0);
-  $("#tally").innerHTML =
-    `<li><span><b>${botellas(vinos)}</b> botellas · <b>${enStock.length}</b> vinos</span></li>` +
-    TIPOS.map(([t, nombre]) => {
-      const n = botellas(vinos.filter((v) => v.tipo === t));
-      const etiqueta = n === 1 ? t : nombre.toLowerCase();
-      return n ? `<li><span class="dot ${t}"></span><span><b>${n}</b> ${etiqueta}</span></li>` : "";
-    }).join("");
+  const porTipo = TIPOS.map(([t, nombre]) => [t, nombre, botellas(vinos.filter((v) => v.tipo === t))]).filter(([, , n]) => n);
+  const pronto = enStock.filter((v) => v.estado === "ya" || v.estado === "urg").length;
+  const total = botellas(vinos);
+  $("#resumen").innerHTML = vinos.length ? `
+    <p class="total">${total}<small>${total === 1 ? "botella" : "botellas"} · ${enStock.length} ${enStock.length === 1 ? "vino" : "vinos"}</small></p>
+    ${total ? `<div class="compo" role="img" aria-label="${porTipo.map(([t, nombre, n]) => `${n} ${n === 1 ? t : nombre.toLowerCase()}`).join(", ")}">
+      ${porTipo.map(([t, , n]) => `<span class="${t}" style="flex:${n}"></span>`).join("")}</div>` : ""}
+    <ul class="tally">${porTipo.map(([t, nombre, n]) =>
+      `<li><b>${n}</b><span><span class="dot ${t}"></span>${n === 1 ? t : nombre.toLowerCase()}</span></li>`).join("")}</ul>
+    ${pronto ? `<button class="alerta" type="button" id="btn-pronto">
+      <svg aria-hidden="true"><use href="#i-reloj"/></svg>
+      <span>${pronto === 1 ? "1 vino conviene beberlo" : `${pronto} vinos conviene beberlos`} antes de que acabe ${new Date().getFullYear() + 1}</span>
+      <span class="ir">Ver</span></button>` : ""}` : "";
+
+  for (const c of document.querySelectorAll("#filtros .chip")) {
+    c.querySelector(".num").textContent = vinos.filter((v) => pasaFiltro(v, c.dataset.filter)).length || "";
+  }
 
   $("#vacio").hidden = vinos.length > 0;
 
@@ -120,7 +190,7 @@ function render() {
     html = TIPOS.map(([t, nombre]) => {
       const grupo = visibles.filter((v) => v.tipo === t);
       if (!grupo.length) return "";
-      return `<section class="grupo"><h2>${nombre} <span class="count">${botellas(grupo)} botellas</span></h2>
+      return `<section class="grupo ${t}"><h2>${nombre} <span class="count">${botellas(grupo)} botellas</span></h2>
         <ol class="ledger">${grupo.map(filaVino).join("")}</ol></section>`;
     }).join("");
   } else {
@@ -430,6 +500,7 @@ async function cambiarBotellas(id, delta) {
   const antes = v.botellas;
   v.botellas = nuevo;
   render();
+  document.querySelector(`.wine[data-id="${CSS.escape(String(id))}"] .n`)?.classList.add("cambio");
   try {
     await store.actualizar(id, { botellas: nuevo });
   } catch (err) {
@@ -566,10 +637,22 @@ async function mostrar(usuario) {
 function enlazar() {
   $("#filtros").addEventListener("click", (e) => {
     const chip = e.target.closest(".chip");
-    if (!chip) return;
-    filtro = chip.dataset.filter;
-    for (const c of document.querySelectorAll(".chip")) c.setAttribute("aria-pressed", String(c === chip));
-    render();
+    if (chip) elegirFiltro(chip.dataset.filter);
+  });
+  $("#resumen").addEventListener("click", (e) => {
+    if (!e.target.closest("#btn-pronto")) return;
+    elegirFiltro("ya");
+    $(".controles").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  // La barra de búsqueda se marca al quedarse pegada arriba para darle fondo.
+  const controles = $(".controles");
+  const marcarPegada = () => controles.classList.toggle("pegada", controles.getBoundingClientRect().top <= parseFloat(getComputedStyle(controles).top) + 1 && window.scrollY > 0);
+  window.addEventListener("scroll", marcarPegada, { passive: true });
+  // «/» lleva al buscador, como en muchas webs.
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "/" || e.metaKey || e.ctrlKey || /input|textarea|select/i.test(document.activeElement?.tagName) || document.querySelector("dialog[open]")) return;
+    e.preventDefault();
+    $("#buscar").focus();
   });
   $("#buscar").addEventListener("input", (e) => {
     busqueda = e.target.value.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").trim();
