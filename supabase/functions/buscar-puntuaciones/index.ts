@@ -47,8 +47,7 @@ type Nota = { fuente: string; nota: string; anada: number | null; url: string };
 const SISTEMA = `Buscas en la web las puntuaciones publicadas de un vino concreto para una bodega personal.
 Usa la búsqueda y abre las páginas que haga falta. Fuentes útiles: guías y críticos (Peñín, Parker /
 Wine Advocate, Suckling, Wine Spectator, Decanter, Vinous, Falstaff, Wine Enthusiast, Jancis Robinson,
-Tim Atkin, Guía Proensa, Gambero Rosso, Hachette, Meininger…) y Vivino. Las fichas de Vivino se abren
-bien con la forma https://www.vivino.com/w/<id>?year=AAAA.
+Tim Atkin, Guía Proensa, Gambero Rosso, Hachette, Meininger…) y Vivino.
 
 Reglas:
 - Solo vale una nota si es de ESE vino (misma bodega y misma etiqueta, no otra gama de la bodega) y de
@@ -56,17 +55,19 @@ Reglas:
 - Copia la nota tal como la da la fuente: "92", "91+", "89–91" (en barrica), "16,5/20", "2★".
 - "fuente" es el nombre corto: Parker, Peñín, Suckling, Wine Spectator, Decanter, Vinous, Falstaff,
   Wine Enthusiast, Jancis Robinson, Tim Atkin, Hachette…
-- Para Vivino da la nota media sobre 5 con un decimal ("4,1"). Si hay nota de la añada, usa esa; si solo
-  hay la media de todas las añadas, pon anada a null.
+- De Vivino basta con el número de la ficha del vino (vivino.com/.../w/<id>): la nota la consulta la app.
+  Si además ves la nota, da la media sobre 5 con un decimal ("4,1") y su añada (null si es la media de
+  todas las añadas).
 - "url" es la página donde has visto la nota.
 - No inventes nada: si no encuentras notas, devuelve las listas vacías.
 
 Termina tu respuesta SOLO con un bloque \`\`\`json con esta forma:
 {"guias": [{"fuente": "Peñín", "nota": "92", "anada": 2019, "url": "https://..."}],
+ "vivino_id": 1234567 o null,
  "vivino": {"nota": "4,1", "anada": 2019, "url": "https://..."} o null}`;
 
 // Saca el último bloque JSON de la respuesta.
-function leerJson(texto: string): { guias?: Nota[]; vivino?: Nota | null } {
+function leerJson(texto: string): { guias?: Nota[]; vivino_id?: unknown; vivino?: Nota | null } {
   const bloques = [...texto.matchAll(/```json\s*([\s\S]*?)```/g)];
   const crudo = bloques.length ? bloques[bloques.length - 1][1] : texto.slice(texto.indexOf("{"), texto.lastIndexOf("}") + 1);
   return JSON.parse(crudo);
@@ -78,7 +79,26 @@ const nombreFuente = (entrada: string) => entrada.replace(/\s+[\d(≈].*$/u, "")
 // Une lo encontrado con lo que ya tenía el vino: las fuentes nuevas sustituyen
 // a las mismas fuentes; se conservan las demás (p. ej. leídas en la etiqueta) y
 // se quitan los «Sin puntuación…» y las estimaciones «≈ …».
-function componer(anterior: string | null, guias: Nota[], vivino: Nota | null, anada: number | null): string {
+type NotaVivino = { fuente: string; nota: string; sufijo: string; url: string };
+
+// Nota de Vivino desde su API: la de la añada si tiene bastantes valoraciones;
+// si no, la media del vino. Si la añada no existe, la API devuelve otra, así
+// que se comprueba vintage.year.
+async function notaVivino(id: number, anada: number | null): Promise<NotaVivino | null> {
+  const api = `https://www.vivino.com/api/wines/${id}/reviews?per_page=1${anada ? `&year=${anada}` : ""}`;
+  const res = await fetch(api, { headers: { "User-Agent": "Mozilla/5.0 (bodega-tablado)", "Accept": "application/json" } });
+  if (!res.ok) return null;
+  const vt = (await res.json())?.vintage;
+  const url = `https://www.vivino.com/w/${id}${anada ? `?year=${anada}` : ""}`;
+  const cifra = (n: number) => n.toFixed(1).replace(".", ",");
+  const deAnada = vt?.statistics?.status !== "BelowThreshold" ? Number(vt?.statistics?.ratings_average) : 0;
+  if (deAnada > 0 && (!anada || Number(vt?.year) === anada)) return { fuente: "Vivino", nota: cifra(deAnada), sufijo: "", url };
+  const media = Number(vt?.wine?.statistics?.ratings_average);
+  if (media > 0) return { fuente: "Vivino", nota: cifra(media), sufijo: anada ? " (media de añadas)" : "", url };
+  return null;
+}
+
+function componer(anterior: string | null, guias: Nota[], vivino: NotaVivino | null): string {
   const nuevas = guias.map((g) => `${g.fuente} ${g.nota}`);
   const nombres = new Set(guias.map((g) => g.fuente.toLowerCase()));
   const viejas = String(anterior ?? "").split(/\s+·\s+/).map((t) => t.trim())
@@ -86,7 +106,7 @@ function componer(anterior: string | null, guias: Nota[], vivino: Nota | null, a
   const conservadas = viejas.filter((t) => !nombres.has(nombreFuente(t)) && !/^vivino/i.test(t));
   const vivinoViejo = viejas.find((t) => /^vivino/i.test(t));
   const vivinoTexto = vivino
-    ? `Vivino ${vivino.nota}/5${anada && vivino.anada !== anada ? " (media de añadas)" : ""}`
+    ? `Vivino ${vivino.nota}/5${vivino.sufijo}`
     : vivinoViejo;
   const todas = [...nuevas, ...conservadas, ...(vivinoTexto ? [vivinoTexto] : [])];
   return todas.length ? todas.join(" · ") : "Sin puntuación publicada";
@@ -156,12 +176,19 @@ Deno.serve(async (req) => {
       g && typeof g.fuente === "string" && g.fuente.trim() && typeof g.nota === "string" && g.nota.trim()
       && urlValida(g.url) && (vino.anada == null || g.anada === vino.anada))
       .map((g) => ({ ...g, fuente: g.fuente.trim(), nota: g.nota.trim() }));
+    // Vivino: primero su API con el id que ha encontrado Claude; si falla, la
+    // nota que Claude haya visto en la página.
+    let vivino: NotaVivino | null = null;
+    const id = Number(datos.vivino_id);
+    if (Number.isInteger(id) && id > 0) vivino = await notaVivino(id, vino.anada).catch(() => null);
     const v = datos.vivino;
-    const vivino = v && urlValida(v.url) && /^\d[,.]\d$/.test(String(v.nota ?? "").trim())
-      && (v.anada == null || vino.anada == null || v.anada === vino.anada)
-      ? { ...v, fuente: "Vivino", nota: String(v.nota).trim().replace(".", ",") } : null;
+    if (!vivino && v && urlValida(v.url) && /^\d[,.]\d$/.test(String(v.nota ?? "").trim())
+      && (v.anada == null || vino.anada == null || v.anada === vino.anada)) {
+      vivino = { fuente: "Vivino", nota: String(v.nota).trim().replace(".", ","), url: v.url,
+        sufijo: vino.anada && v.anada == null ? " (media de añadas)" : "" };
+    }
 
-    const puntuacion = componer(vino.puntuacion, guias, vivino, vino.anada);
+    const puntuacion = componer(vino.puntuacion, guias, vivino);
     const fuentes = [...guias, ...(vivino ? [vivino] : [])].map(({ fuente, nota, url }) => ({ fuente, nota, url }));
 
     // puntuacion_fuentes solo existe si se ha aplicado supabase/puntuacion-fuentes.sql.
