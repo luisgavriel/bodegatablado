@@ -290,9 +290,9 @@ function render() {
   $("#resumen").innerHTML = vinos.length ? `
     <p class="total">${total}<small>${total === 1 ? "botella" : "botellas"} · ${enStock.length} ${enStock.length === 1 ? "vino" : "vinos"}</small></p>
     ${total ? `<div class="compo" role="img" aria-label="${porTipo.map(([t, nombre, n]) => `${n} ${n === 1 ? t : nombre.toLowerCase()}`).join(", ")}">
-      ${porTipo.map(([t, , n]) => `<span class="${t}" style="flex:${n}"></span>`).join("")}</div>` : ""}
-    <ul class="tally">${porTipo.map(([t, nombre, n]) =>
-      `<li><b>${n}</b><span><span class="dot ${t}"></span>${n === 1 ? t : nombre.toLowerCase()}</span></li>`).join("")}</ul>
+      ${porTipo.map(([t, nombre, n]) => `<span class="${t}${filtro === t ? " activo" : ""}" style="flex:${n}" data-tipo="${t}" title="Ver ${nombre.toLowerCase()}"></span>`).join("")}</div>` : ""}
+    <ul class="tally${porTipo.some(([t]) => t === filtro) ? " filtrado" : ""}">${porTipo.map(([t, nombre, n]) =>
+      `<li><button type="button" class="${t}" data-tipo="${t}" aria-pressed="${filtro === t}" aria-label="Ver ${nombre.toLowerCase()}"><b>${n}</b><span><span class="dot ${t}"></span>${n === 1 ? t : nombre.toLowerCase()}</span></button></li>`).join("")}</ul>
     ${pronto ? `<button class="alerta" type="button" id="btn-pronto">
       <svg aria-hidden="true"><use href="#i-reloj"/></svg>
       <span>${pronto === 1 ? "1 vino conviene beberlo" : `${pronto} vinos conviene beberlos`} antes de que acabe ${new Date().getFullYear() + 1}</span>
@@ -771,10 +771,14 @@ function enlazar() {
     const chip = e.target.closest(".chip");
     if (chip) elegirFiltro(chip.dataset.filter);
   });
+  // El aviso y cada tipo del resumen (casilla o tramo de la barra) llevan
+  // a la lista filtrada. Volver a tocar el tipo elegido quita el filtro.
   $("#resumen").addEventListener("click", (e) => {
-    if (!e.target.closest("#btn-pronto")) return;
-    elegirFiltro("ya");
-    $(".controles").scrollIntoView({ behavior: "smooth", block: "start" });
+    const tipo = e.target.closest("[data-tipo]")?.dataset.tipo;
+    if (tipo) elegirFiltro(filtro === tipo ? "todo" : tipo);
+    else if (e.target.closest("#btn-pronto")) elegirFiltro("ya");
+    else return;
+    if (filtro !== "todo") $(".controles").scrollIntoView({ behavior: "smooth", block: "start" });
   });
   // La barra de búsqueda se marca al quedarse pegada arriba para darle fondo.
   const controles = $(".controles");

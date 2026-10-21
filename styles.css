@@ -115,9 +115,19 @@ h2 .count { font-size: 13px; font-family: var(--font-ui); color: var(--muted); f
 .total { margin: 0; font: 500 44px/1 var(--font-display); font-variant-numeric: tabular-nums; }
 .total small { font: 500 14px var(--font-ui); color: var(--muted); margin-left: 8px; }
 .compo { display: flex; gap: 2px; height: 10px; border-radius: 999px; overflow: hidden; }
-.compo span { background: var(--c, var(--muted)); }
+.compo span { background: var(--c, var(--muted)); cursor: pointer; transition: opacity .2s; }
+.compo:has(.activo) span:not(.activo) { opacity: .3; }
 .tally { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
-.tally li { background: var(--surface); border-radius: 12px; padding: 8px 12px; display: grid; }
+.tally li { display: grid; }
+.tally button {
+  display: grid; justify-items: start; gap: 0; width: 100%; text-align: left; cursor: pointer;
+  font: inherit; color: inherit; background: var(--surface); border: 1px solid transparent; border-radius: 12px; padding: 8px 12px;
+  transition: background-color .2s, border-color .2s, opacity .2s;
+}
+.tally button:hover { border-color: var(--rule); }
+.tally button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tally button[aria-pressed="true"] { border-color: var(--c, var(--accent)); background: color-mix(in srgb, var(--c, var(--accent)) 16%, var(--surface)); }
+.tally.filtrado button[aria-pressed="false"] { opacity: .55; }
 .tally b { font: 500 22px/1.15 var(--font-display); font-variant-numeric: tabular-nums; }
 .tally span { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
 .alerta {
