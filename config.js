@@ -4,4 +4,4 @@
 // Si se dejan vacíos, la app funciona en modo demo con los datos
 // guardados solo en este navegador.
 export const SUPABASE_URL = "https://xaqnfbeyskrhilotnlrj.supabase.co";
-export const SUPABASE_ANON_KEY = "";
+export const SUPABASE_ANON_KEY = "sb_publishable_XhLjjpCyh6KZCW-FYTjTYw_HV6GQtrL";
