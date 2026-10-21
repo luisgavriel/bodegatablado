@@ -233,7 +233,9 @@ textarea { resize: vertical; }
 .foto.espumoso, .foto-grande.espumoso { --tarjeta: var(--espumoso-bg); }
 .foto.rosado, .foto-grande.rosado { --tarjeta: var(--rosado-bg); }
 .foto { width: 64px; height: 120px; display: grid; place-items: center; }
-.foto img { width: 100%; height: 100%; object-fit: contain; }
+/* La foto ocupa la tarjeta entera sin empujar su tamaño: así una foto alta
+   (las igualadas son de 300×900) siempre cabe entera y centrada. */
+.foto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: center; }
 img.norm { filter: drop-shadow(0 6px 6px rgb(0 0 0 / .32)); padding: 6px 0; }
 img.orig { mix-blend-mode: var(--fundir, normal); padding: 4px; }
 .foto .botella { width: 40px; height: 108px; filter: drop-shadow(0 6px 6px rgb(0 0 0 / .3)); }
