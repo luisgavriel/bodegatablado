@@ -318,6 +318,22 @@ img.orig { mix-blend-mode: var(--fundir, normal); padding: 4px; }
 #lista.galeria .eval { margin-top: 4px; min-width: 0; }
 #lista.galeria .win { min-width: 0; }
 #lista.galeria .stock-col { padding: 10px 14px 14px; justify-items: start; }
+
+/* Marcador de puntuaciones: solo en la galería. */
+.marcador { display: none; }
+#lista.galeria .marcador {
+  display: grid; grid-template-columns: 1fr 1fr; margin: 10px 14px 0;
+  border: 1px solid var(--rule); border-radius: 12px; overflow: hidden;
+}
+.marcador .casilla { padding: 7px 10px; display: grid; gap: 1px; min-width: 0; }
+.marcador .casilla + .casilla { border-left: 1px solid var(--rule); }
+.marcador .lbl { font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.marcador .val { font: 500 22px/1.05 var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.marcador .val small { font: 600 11px var(--font-ui); color: var(--muted); margin-left: 5px; vertical-align: 3px; }
+.marcador .sub { font-size: 11px; color: var(--oro); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.marcador .vacia .sub { color: var(--muted); font-weight: 400; }
+.marcador .st { color: var(--oro); letter-spacing: .5px; }
+.marcador .vacia .val { color: var(--muted); opacity: .6; }
 #lista.galeria .stock { flex-direction: row; }
 
 /* Contador de botellas en una sola píldora. */
@@ -480,6 +496,9 @@ dialog.ficha {
   #lista.galeria .name { font-size: 16px; }
   #lista.galeria .main { padding: 10px 12px 0; }
   #lista.galeria .stock-col { padding: 8px 12px 12px; }
+  #lista.galeria .marcador { margin: 8px 12px 0; }
+  .marcador .casilla { padding: 6px 8px; }
+  .marcador .st { font-size: 10px; letter-spacing: 0; }
   .title-row { flex-wrap: nowrap; }
 }
 

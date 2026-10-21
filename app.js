@@ -91,25 +91,63 @@ function botella(v) {
   </svg>`;
 }
 
-// La puntuación es texto libre («Peñín 92 · Vivino 3,9/5»). Cada trozo se
-// pinta según lo que sea: nota de un crítico sobre 100 como sello, Vivino
-// con estrellas y el resto tal cual. «Sin puntuación…» no se muestra.
-function puntuacionHtml(texto) {
-  return String(texto ?? "").split(/\s+·\s+/).map((trozo) => {
+// La puntuación es texto libre («Peñín 92 · Vivino 3,9/5»). Se separa en
+// notas de guías sobre 100, la nota de Vivino sobre 5 y el resto del texto.
+// «Sin puntuación…» se descarta.
+function leerPuntuacion(texto) {
+  const res = { guias: [], vivino: null, otros: [] };
+  for (const trozo of String(texto ?? "").split(/\s+·\s+/)) {
     const t = trozo.trim();
-    if (!t || /^(aún )?sin puntuación/i.test(t)) return "";
-    const viv = t.match(/^Vivino\s+(\d)[,.](\d)\s*\/\s*5\s*(.*)$/i);
-    if (viv) {
-      const nota = Number(`${viv[1]}.${viv[2]}`);
-      const llenas = Math.round(nota);
-      return `<span class="vivino" title="${esc(t)}"><span class="st" aria-hidden="true">${"★".repeat(llenas)}${"☆".repeat(5 - llenas)}</span><b>${viv[1]},${viv[2]}</b> Vivino</span>`;
+    if (!t || /^(aún )?sin puntuación/i.test(t)) continue;
+    const viv = t.match(/^Vivino\s+(\d)[,.](\d)\s*\/\s*5/i);
+    if (viv && !res.vivino) {
+      res.vivino = { texto: t, nota: Number(`${viv[1]}.${viv[2]}`), cifra: `${viv[1]},${viv[2]}` };
+      continue;
     }
-    const critico = t.match(/^([\p{Lu}][\p{L}.' ]{1,24}?)\s+(\d{2,3}(?:[–-]\d{2,3})?\+?)(?:\/100)?(\s.*)?$/u);
+    const critico = t.match(/^([\p{Lu}][\p{L}.' ]{1,24}?)\s+(\d{2,3}(?:[–-]\d{2,3})?\+?(?=\/100|\s|$)|\d{1,2}(?:[,.]\d)?\/20)(?:\/100)?(\s.*)?$/u);
     if (critico && !/\d/.test(critico[1])) {
-      return `<span class="sello" title="${esc(t)}"><b>${esc(critico[2])}</b><span>${esc(critico[1])}</span></span>`;
+      // Para ordenar, «89–91» cuenta como 91, «91+» como 91 y las notas
+      // sobre 20 (Decanter) se pasan a 100 multiplicando por 5.
+      const sobre20 = critico[2].endsWith("/20");
+      const valor = sobre20 ? Number(critico[2].replace(",", ".").slice(0, -3)) * 5
+        : Math.max(...critico[2].match(/\d+/g).map(Number));
+      res.guias.push({ texto: t, guia: critico[1], nota: critico[2], valor });
+      continue;
     }
-    return `<span class="score">${esc(t)}</span>`;
-  }).join("");
+    res.otros.push(t);
+  }
+  res.guias.sort((a, b) => b.valor - a.valor);
+  return res;
+}
+
+const estrellas = (nota) => { const n = Math.round(nota); return "★".repeat(n) + "☆".repeat(5 - n); };
+
+function puntuacionHtml(texto) {
+  const { guias, vivino, otros } = leerPuntuacion(texto);
+  return [
+    ...guias.map((g) => `<span class="sello" title="${esc(g.texto)}"><b>${esc(g.nota)}</b><span>${esc(g.guia)}</span></span>`),
+    vivino ? `<span class="vivino" title="${esc(vivino.texto)}"><span class="st" aria-hidden="true">${estrellas(vivino.nota)}</span><b>${vivino.cifra}</b> Vivino</span>` : "",
+    ...otros.map((t) => `<span class="score">${esc(t)}</span>`),
+  ].join("");
+}
+
+// Marcador de la galería: dos casillas fijas, la mejor nota de las guías
+// (con «+N» si hay más; todas están en la ficha) y la de Vivino, con un
+// guion si falta. Así todas las tarjetas miden igual.
+function marcadorHtml(texto) {
+  const { guias, vivino } = leerPuntuacion(texto);
+  const [mejor, ...resto] = guias;
+  const casilla = (titulo, val, sub, vacia, title = "") =>
+    `<div class="casilla${vacia ? " vacia" : ""}"${title ? ` title="${esc(title)}"` : ""}><span class="lbl">${titulo}</span><span class="val">${val}</span><span class="sub">${sub}</span></div>`;
+  return `<div class="marcador">
+    ${mejor
+      ? casilla("Guías", `${esc(mejor.nota)}${resto.length ? `<small>+${resto.length}</small>` : ""}`,
+        esc(mejor.guia), false, guias.map((g) => g.texto).join(" · "))
+      : casilla("Guías", "—", "Sin nota", true)}
+    ${vivino
+      ? casilla("Vivino", vivino.cifra, `<span class="st" aria-hidden="true">${estrellas(vivino.nota)}</span>`, false, vivino.texto)
+      : casilla("Vivino", "—", "Sin nota", true)}
+  </div>`;
 }
 
 // Línea de tiempo de la ventana de consumo: de la añada (o el inicio de la
@@ -155,6 +193,7 @@ function filaVino(v) {
         </p>` : ""}
         ${v.botellas > 0 ? lineaHtml(v) : ""}
       </div>
+      ${marcadorHtml(v.puntuacion)}
       <div class="stock-col"><div class="stock">
         <button class="step" type="button" data-delta="-1" aria-label="Quitar una botella" ${v.botellas === 0 ? "disabled" : ""}>−</button>
         <span class="n" aria-label="${v.botellas} ${v.botellas === 1 ? "botella" : "botellas"}">${v.botellas}</span>
