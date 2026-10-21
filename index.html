@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Bodega Tablado</title>
-  <meta name="theme-color" content="#2c5a4d">
+  <meta name="theme-color" content="#f6f1ed" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141012" media="(prefers-color-scheme: dark)">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
@@ -12,17 +13,24 @@
   <meta name="apple-mobile-web-app-title" content="Bodega">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Instrument+Sans:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-mas" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.9" fill="currentColor"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><circle cx="19" cy="12" r="1.9" fill="currentColor"/></symbol>
+    <symbol id="i-buscar" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" fill="none"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-orden" viewBox="0 0 24 24"><path d="M7 4v16m0 0-3-3m3 3 3-3M17 20V4m0 0-3 3m3-3 3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-reloj" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
+  </svg>
   <div class="wrap">
     <header class="top">
       <div class="title-row">
         <h1>Bodega Tablado</h1>
         <div class="acciones">
-          <button class="btn primary" id="btn-nuevo" type="button" hidden>+ Añadir vino</button>
-          <button class="btn ghost" id="btn-menu" type="button" aria-haspopup="true" aria-expanded="false" hidden>⋯</button>
+          <button class="btn primary" id="btn-nuevo" type="button" aria-label="Añadir vino" hidden><svg aria-hidden="true"><use href="#i-mas"/></svg><span class="txt">Añadir vino</span></button>
+          <button class="btn ghost icono" id="btn-menu" type="button" aria-label="Más opciones" aria-haspopup="true" aria-expanded="false" hidden><svg aria-hidden="true"><use href="#i-menu"/></svg></button>
           <div class="menu" id="menu" hidden>
             <button type="button" id="btn-compartir">Compartir bodega</button>
             <button type="button" id="btn-fotos-todas">Buscar las fotos que faltan</button>
@@ -37,7 +45,7 @@
       </div>
       <p class="aviso" id="aviso-demo" hidden>Modo demo: los cambios se guardan solo en este navegador. Conecta Supabase en <code>config.js</code> para sincronizar móvil y ordenador.</p>
       <p class="acceso" id="info-acceso" hidden></p>
-      <ul class="tally" id="tally" aria-label="Resumen"></ul>
+      <section class="resumen" id="resumen" aria-label="Resumen"></section>
     </header>
 
     <section class="login" id="login" hidden>
@@ -57,25 +65,32 @@
       </div>
 
       <div class="controles">
-        <input type="search" id="buscar" placeholder="Buscar por vino, bodega, uva, país…" aria-label="Buscar">
-        <nav class="filters" id="filtros" aria-label="Filtrar">
-          <button class="chip" type="button" data-filter="todo" aria-pressed="true">Todo</button>
-          <button class="chip" type="button" data-filter="tinto" aria-pressed="false">Tintos</button>
-          <button class="chip" type="button" data-filter="blanco" aria-pressed="false">Blancos</button>
-          <button class="chip" type="button" data-filter="espumoso" aria-pressed="false">Espumosos</button>
-          <button class="chip" type="button" data-filter="rosado" aria-pressed="false">Rosados</button>
-          <button class="chip" type="button" data-filter="ya" aria-pressed="false">Beber ya</button>
-          <button class="chip" type="button" data-filter="guardar" aria-pressed="false">Guardar</button>
-          <button class="chip" type="button" data-filter="agotados" aria-pressed="false">Agotados</button>
-        </nav>
-        <label class="orden">Ordenar
-          <select id="orden">
-            <option value="tipo">Por tipo</option>
-            <option value="urgencia">Por urgencia</option>
-            <option value="anada">Por añada</option>
-            <option value="nombre">Por nombre</option>
-          </select>
-        </label>
+        <div class="buscar">
+          <svg aria-hidden="true"><use href="#i-buscar"/></svg>
+          <input type="search" id="buscar" placeholder="Buscar por vino, bodega, uva, país…" aria-label="Buscar">
+        </div>
+        <div class="fila-filtros">
+          <nav class="filters" id="filtros" aria-label="Filtrar">
+            <button class="chip" type="button" data-filter="todo" aria-pressed="true">Todo <span class="num"></span></button>
+            <button class="chip" type="button" data-filter="tinto" aria-pressed="false"><span class="dot tinto"></span>Tintos <span class="num"></span></button>
+            <button class="chip" type="button" data-filter="blanco" aria-pressed="false"><span class="dot blanco"></span>Blancos <span class="num"></span></button>
+            <button class="chip" type="button" data-filter="espumoso" aria-pressed="false"><span class="dot espumoso"></span>Espumosos <span class="num"></span></button>
+            <button class="chip" type="button" data-filter="rosado" aria-pressed="false"><span class="dot rosado"></span>Rosados <span class="num"></span></button>
+            <span class="sep" aria-hidden="true"></span>
+            <button class="chip" type="button" data-filter="ya" aria-pressed="false">Beber ya <span class="num"></span></button>
+            <button class="chip" type="button" data-filter="guardar" aria-pressed="false">Guardar <span class="num"></span></button>
+            <button class="chip" type="button" data-filter="agotados" aria-pressed="false">Agotados <span class="num"></span></button>
+          </nav>
+          <label class="orden">
+            <svg aria-hidden="true"><use href="#i-orden"/></svg>
+            <select id="orden" aria-label="Ordenar">
+              <option value="tipo">Por tipo</option>
+              <option value="urgencia">Por urgencia</option>
+              <option value="anada">Por añada</option>
+              <option value="nombre">Por nombre</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <div id="lista"></div>
