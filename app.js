@@ -169,26 +169,41 @@ async function buscarFotos() {
   }
 }
 
+// Devuelve null si ha guardado la foto, o el mensaje de error.
 async function fotoAutomatica(id) {
   try {
     ponerFoto(id, await store.fotos.auto(id));
     render();
-    return true;
+    return null;
   } catch (err) {
     console.warn("Sin foto para", id, err);
-    return false;
+    return err.message || String(err);
   }
+}
+
+function avisar(msg) {
+  const aviso = $("#aviso-demo");
+  aviso.textContent = msg;
+  aviso.hidden = false;
 }
 
 async function fotosQueFaltan() {
   const pendientes = vinos.filter((v) => !v.imagen_url);
   if (!pendientes.length) return toast("Todos los vinos tienen foto");
   let hechas = 0;
+  const fallos = [];
   for (const [i, v] of pendientes.entries()) {
     toast(`Buscando fotos… ${i + 1} de ${pendientes.length}`);
-    if (await fotoAutomatica(v.id)) hechas++;
+    const error = await fotoAutomatica(v.id);
+    if (error) fallos.push(`${v.nombre}: ${error}`);
+    else hechas++;
+    // Si las tres primeras fallan, el problema es de configuración: parar y enseñarlo.
+    if (!hechas && fallos.length === 3) {
+      return avisar("No se pudo buscar fotos. Error: " + error);
+    }
   }
-  toast(`${hechas} fotos nuevas` + (hechas < pendientes.length ? `, ${pendientes.length - hechas} sin encontrar` : ""));
+  toast(`${hechas} fotos nuevas` + (fallos.length ? `, ${fallos.length} sin encontrar` : ""));
+  if (fallos.length) avisar(`Sin foto (${fallos.length}): ` + fallos.join(" · "));
 }
 
 // ---- Edición ----
@@ -224,7 +239,7 @@ async function guardar(e) {
     } else {
       const nuevo = await store.crear(datos);
       vinos.push(nuevo);
-      if (store.fotos) fotoAutomatica(nuevo.id);
+      if (store.fotos) fotoAutomatica(nuevo.id).then((e) => e && toast("Sin foto: " + e));
     }
     $("#dlg").close();
     render();

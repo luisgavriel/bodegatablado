@@ -47,6 +47,7 @@ type Vino = { id: string; user_id: string; nombre: string; bodega: string | null
 type Candidata = { url: string; miniatura: string; titulo: string };
 
 async function buscar(vino: Vino): Promise<Candidata[]> {
+  if (!Deno.env.get("BRAVE_API_KEY")) throw new Error("Falta el secreto BRAVE_API_KEY en Supabase");
   const q = [vino.bodega, vino.nombre, vino.anada, "botella vino"].filter(Boolean).join(" ");
   const url = new URL("https://api.search.brave.com/res/v1/images/search");
   url.searchParams.set("q", q);
@@ -120,13 +121,19 @@ Deno.serve(async (req) => {
     }
 
     if (accion === "auto") {
-      for (const c of (await buscar(vino)).slice(0, 5)) {
+      const candidatas = await buscar(vino);
+      let ultimoError = "Brave no devolvió ninguna foto";
+      for (const c of candidatas.slice(0, 5)) {
         // Si la original no se deja descargar, la miniatura de Brave siempre sirve.
         for (const u of [c.url, c.miniatura]) {
-          try { return respuesta({ imagen_url: await guardar(admin, vino, u) }); } catch { /* siguiente */ }
+          try {
+            return respuesta({ imagen_url: await guardar(admin, vino, u) });
+          } catch (e) {
+            ultimoError = e instanceof Error ? e.message : String(e);
+          }
         }
       }
-      return respuesta({ error: "No encontré ninguna foto" }, 404);
+      return respuesta({ error: `No se pudo guardar ninguna foto (${ultimoError})` }, 404);
     }
 
     return respuesta({ error: "Acción desconocida" }, 400);
