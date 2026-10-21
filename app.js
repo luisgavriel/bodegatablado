@@ -17,6 +17,8 @@ let filtro = "todo";
 let busqueda = "";
 let orden = "tipo";
 let editando = null;
+let acceso = { rol: "dueno" };
+const soloVer = () => acceso.rol === "lector";
 
 // fijo = true deja el mensaje en pantalla hasta el siguiente toast.
 function toast(msg, fijo = false) {
@@ -216,7 +218,10 @@ function abrirDialogo(vino) {
   $("#dlg-titulo").textContent = vino ? "Editar vino" : "Nuevo vino";
   $("#btn-borrar").hidden = !vino;
   if (vino) for (const el of f.elements) if (el.name) el.value = vino[el.name] ?? "";
-  $("#fotos-bloque").hidden = !vino || !store.fotos;
+  $("#fotos-bloque").hidden = !vino || !store.fotos || soloVer();
+  for (const el of f.elements) if (el.name) el.disabled = soloVer();
+  $("#btn-guardar").hidden = soloVer();
+  if (soloVer()) $("#btn-borrar").hidden = true;
   $("#candidatas").innerHTML = "";
   $("#fotos-estado").textContent = "";
   if (vino) pintarFotoActual(vino);
@@ -261,6 +266,7 @@ async function borrar() {
 }
 
 async function cambiarBotellas(id, delta) {
+  if (soloVer()) return;
   const v = vinos.find((x) => x.id === id);
   const nuevo = Math.max(0, v.botellas + delta);
   if (nuevo === v.botellas) return;
@@ -306,6 +312,61 @@ async function cargarIniciales() {
   } catch (err) { fallo(err); }
 }
 
+// ---- Compartir ----
+async function pintarMiembros() {
+  const estado = $("#compartir-estado");
+  try {
+    const miembros = await store.miembros.listar();
+    $("#lista-miembros").innerHTML = miembros.map((m) => `
+      <li data-email="${esc(m.email)}">
+        <span class="email">${esc(m.email)}</span>
+        <select aria-label="Permiso de ${esc(m.email)}">
+          <option value="lector"${m.rol === "lector" ? " selected" : ""}>Solo ver</option>
+          <option value="editor"${m.rol === "editor" ? " selected" : ""}>Puede editar</option>
+        </select>
+        <button class="btn danger" type="button" data-quitar>Quitar</button>
+      </li>`).join("");
+    estado.textContent = miembros.length ? "" : "Todavía no has compartido tu bodega con nadie.";
+  } catch (err) {
+    estado.textContent = "No se pudo leer la lista: " + err.message +
+      (/miembros/.test(err.message) ? ". Falta pegar compartir.sql en Supabase." : "");
+  }
+}
+
+function enlazarCompartir() {
+  $("#btn-compartir").addEventListener("click", () => {
+    $("#dlg-compartir").showModal();
+    pintarMiembros();
+  });
+  $("#btn-cerrar-compartir").addEventListener("click", () => $("#dlg-compartir").close());
+  $("#form-miembro").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = $("#miembro-email").value.trim().toLowerCase();
+    try {
+      await store.miembros.guardar(email, $("#miembro-rol").value);
+      $("#miembro-email").value = "";
+      await pintarMiembros();
+      $("#compartir-estado").textContent = `Listo. Dile a ${email} que entre en esta web con ese correo.`;
+    } catch (err) { $("#compartir-estado").textContent = "No se pudo añadir: " + err.message; }
+  });
+  $("#lista-miembros").addEventListener("change", async (e) => {
+    const li = e.target.closest("li");
+    try {
+      await store.miembros.guardar(li.dataset.email, e.target.value);
+      $("#compartir-estado").textContent = "Permiso cambiado.";
+    } catch (err) { $("#compartir-estado").textContent = "No se pudo cambiar: " + err.message; }
+  });
+  $("#lista-miembros").addEventListener("click", async (e) => {
+    if (!e.target.closest("[data-quitar]")) return;
+    const email = e.target.closest("li").dataset.email;
+    try {
+      await store.miembros.quitar(email);
+      await pintarMiembros();
+      $("#compartir-estado").textContent = `${email} ya no tiene acceso.`;
+    } catch (err) { $("#compartir-estado").textContent = "No se pudo quitar: " + err.message; }
+  });
+}
+
 // ---- Sesión ----
 async function mostrar(usuario) {
   const dentro = !!usuario;
@@ -314,8 +375,22 @@ async function mostrar(usuario) {
   $("#btn-nuevo").hidden = !dentro;
   $("#btn-menu").hidden = !dentro;
   $("#btn-salir").hidden = store.modo === "local";
-  $("#btn-fotos-todas").hidden = !store.fotos;
   if (!dentro) return;
+  try {
+    acceso = await store.acceso(usuario);
+  } catch (err) {
+    console.error(err);
+  }
+  const ajena = acceso.rol !== "dueno";
+  document.body.classList.toggle("solo-ver", soloVer());
+  $("#info-acceso").hidden = !ajena;
+  $("#info-acceso").textContent = ajena
+    ? `Bodega de ${acceso.dueno_email ?? "otra persona"} · ${soloVer() ? "solo puedes verla" : "puedes editarla"}`
+    : "";
+  $("#btn-compartir").hidden = !store.miembros || ajena;
+  $("#btn-fotos-todas").hidden = !store.fotos || soloVer();
+  $("#btn-importar").hidden = soloVer();
+  $("#btn-cargar-iniciales").hidden = ajena;
   try {
     vinos = await store.listar();
   } catch (err) {
@@ -373,6 +448,7 @@ function enlazar() {
     e.target.value = "";
   });
   $("#btn-salir").addEventListener("click", () => store.salir());
+  enlazarCompartir();
 
   $("#form-login").addEventListener("submit", async (e) => {
     e.preventDefault();

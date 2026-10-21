@@ -111,6 +111,12 @@ Deno.serve(async (req) => {
       .select("id, user_id, nombre, bodega, anada, imagen_url").eq("id", vino_id).single();
     if (error || !vino) return respuesta({ error: "Vino no encontrado" }, 404);
 
+    // Solo quien puede editar la bodega busca y cambia fotos. Si compartir.sql
+    // no está aplicado, la función puede_editar no existe y vale con ser el dueño.
+    const { data: editar, error: errEditar } = await usuario.rpc("puede_editar", { dueno: vino.user_id });
+    const permitido = errEditar ? vino.user_id === sesion.user.id : editar === true;
+    if (!permitido) return respuesta({ error: "No tienes permiso para cambiar fotos en esta bodega" }, 403);
+
     const admin = createClient(SUPABASE_URL, CLAVE_SECRETA);
 
     if (accion === "buscar") return respuesta({ candidatas: await buscar(vino) });

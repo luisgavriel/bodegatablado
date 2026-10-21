@@ -46,6 +46,12 @@ y guarda la elegida en la carpeta pública `fotos` de Supabase Storage.
 En la app: al añadir un vino se busca su foto sola; en la ficha de cada vino, *Buscar otra foto*;
 y en el menú ⋯, *Buscar las fotos que faltan*. Sin foto se muestra una botella dibujada.
 
+## Compartir la bodega
+
+En Supabase, *SQL Editor*: pega `supabase/compartir.sql` y pulsa *Run*. Después, en la app, menú ⋯ →
+*Compartir bodega*: añade correos con permiso *Solo ver* o *Puede editar*. Esas personas entran con su
+correo en la misma dirección y ven tus vinos.
+
 ## Probar en local
 
 ```sh

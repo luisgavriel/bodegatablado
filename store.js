@@ -25,8 +25,34 @@ async function crearStoreSupabase() {
   const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const check = ({ data, error }) => { if (error) throw error; return data; };
 
+  // De quién es la bodega que se ve y qué puede hacer este usuario:
+  // "dueno" (la suya), "editor" o "lector" (la de otra persona que le ha
+  // dado acceso desde Compartir).
+  let acceso = null;
+
   return {
     modo: "nube",
+    async acceso(usuario) {
+      acceso = { dueno: usuario.id, rol: "dueno", dueno_email: usuario.email };
+      const { data, error } = await sb.from("miembros")
+        .select("owner, owner_email, rol").eq("email", (usuario.email ?? "").toLowerCase()).limit(1);
+      // Sin la tabla miembros (compartir.sql sin aplicar) cada uno ve lo suyo.
+      if (!error && data?.length) {
+        acceso = { dueno: data[0].owner, rol: data[0].rol, dueno_email: data[0].owner_email };
+      }
+      return acceso;
+    },
+    miembros: {
+      async listar() {
+        return check(await sb.from("miembros").select("email, rol").eq("owner", acceso.dueno).order("email"));
+      },
+      async guardar(email, rol) {
+        check(await sb.from("miembros").upsert({ email: email.trim().toLowerCase(), rol }));
+      },
+      async quitar(email) {
+        check(await sb.from("miembros").delete().eq("owner", acceso.dueno).eq("email", email));
+      },
+    },
     async usuario() {
       const { data } = await sb.auth.getSession();
       return data.session?.user ?? null;
@@ -38,13 +64,13 @@ async function crearStoreSupabase() {
     },
     async salir() { await sb.auth.signOut(); },
     async listar() {
-      return check(await sb.from("vinos").select("*").order("created_at"));
+      return check(await sb.from("vinos").select("*").eq("user_id", acceso.dueno).order("created_at"));
     },
     async crear(vino) {
-      return check(await sb.from("vinos").insert(limpiar(vino)).select().single());
+      return check(await sb.from("vinos").insert({ ...limpiar(vino), user_id: acceso.dueno }).select().single());
     },
     async crearVarios(vinos) {
-      return check(await sb.from("vinos").insert(vinos.map(limpiar)).select());
+      return check(await sb.from("vinos").insert(vinos.map((v) => ({ ...limpiar(v), user_id: acceso.dueno }))).select());
     },
     async actualizar(id, cambios) {
       return check(await sb.from("vinos").update(limpiar(cambios)).eq("id", id).select().single());
@@ -86,6 +112,8 @@ function crearStoreLocal() {
   return {
     modo: "local",
     fotos: null,
+    miembros: null,
+    async acceso() { return { rol: "dueno" }; },
     async usuario() { return { email: null }; },
     onAuth() {},
     async entrar() {},

@@ -24,6 +24,7 @@
           <button class="btn primary" id="btn-nuevo" type="button" hidden>+ Añadir vino</button>
           <button class="btn ghost" id="btn-menu" type="button" aria-haspopup="true" aria-expanded="false" hidden>⋯</button>
           <div class="menu" id="menu" hidden>
+            <button type="button" id="btn-compartir">Compartir bodega</button>
             <button type="button" id="btn-fotos-todas">Buscar las fotos que faltan</button>
             <button type="button" id="btn-exportar">Exportar copia (JSON)</button>
             <button type="button" id="btn-importar">Importar copia (JSON)</button>
@@ -33,6 +34,7 @@
         </div>
       </div>
       <p class="aviso" id="aviso-demo" hidden>Modo demo: los cambios se guardan solo en este navegador. Conecta Supabase en <code>config.js</code> para sincronizar móvil y ordenador.</p>
+      <p class="acceso" id="info-acceso" hidden></p>
       <ul class="tally" id="tally" aria-label="Resumen"></ul>
     </header>
 
@@ -124,9 +126,30 @@
         <button class="btn danger" type="button" id="btn-borrar">Borrar</button>
         <span class="sp"></span>
         <button class="btn ghost" type="button" id="btn-cancelar">Cancelar</button>
-        <button class="btn primary" type="submit">Guardar</button>
+        <button class="btn primary" type="submit" id="btn-guardar">Guardar</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="dlg-compartir">
+    <div class="compartir">
+      <h2>Compartir bodega</h2>
+      <p class="meta">Las personas que añadas entran en la app con su correo y ven tus vinos. Con «Puede editar» también pueden cambiar botellas, añadir y borrar vinos.</p>
+      <ul class="miembros" id="lista-miembros"></ul>
+      <form class="nuevo-miembro" id="form-miembro">
+        <input type="email" id="miembro-email" required placeholder="correo@ejemplo.com" autocomplete="off" aria-label="Correo">
+        <select id="miembro-rol" aria-label="Permiso">
+          <option value="lector">Solo ver</option>
+          <option value="editor">Puede editar</option>
+        </select>
+        <button class="btn primary" type="submit">Añadir</button>
+      </form>
+      <p class="meta" id="compartir-estado" role="status"></p>
+      <div class="dlg-acciones">
+        <span class="sp"></span>
+        <button class="btn ghost" type="button" id="btn-cerrar-compartir">Cerrar</button>
+      </div>
+    </div>
   </dialog>
 
   <div class="toast" id="toast" role="status" hidden></div>

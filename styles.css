@@ -190,6 +190,18 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .candidata { padding: 4px; height: 120px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; cursor: pointer; display: grid; place-items: center; }
 .candidata img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .candidata:hover, .candidata:focus-visible { border-color: var(--accent); outline: 2px solid var(--accent); }
+.acceso { margin: 0; font-size: 14px; color: var(--muted); }
+.compartir { padding: 20px; display: grid; gap: 14px; }
+.compartir .meta { max-width: 60ch; }
+.miembros { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+.miembros:empty { border: 0; }
+.miembros li { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--rule); }
+.miembros .email { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.miembros select { width: auto; }
+.nuevo-miembro { display: flex; flex-wrap: wrap; gap: 8px; }
+.nuevo-miembro input { flex: 1 1 220px; }
+.nuevo-miembro select { width: auto; }
+.solo-ver .step, .solo-ver #btn-nuevo { display: none; }
 .dlg-acciones { display: flex; gap: 8px; align-items: center; }
 .dlg-acciones .sp { flex: 1; }
 
