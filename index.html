@@ -27,6 +27,15 @@
     <symbol id="i-cerrar" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></symbol>
     <symbol id="i-editar" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><path d="m13.5 6.5 4 4" stroke="currentColor" stroke-width="2"/></symbol>
     <symbol id="i-copa" viewBox="0 0 24 24"><path d="M7 3h10v4a5 5 0 0 1-10 0z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><path d="M12 12v8M8 21h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-flecha" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-foto" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="9" cy="10" r="2" fill="currentColor"/><path d="m4 18 6-5 4 3 3-2 4 3" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+    <symbol id="i-varita" viewBox="0 0 24 24"><path d="M4 20 15 9M14 4v3M19 9h-3M17.5 5.5l-2 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
+    <symbol id="i-deshacer" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-compartir" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="6" cy="12" r="3" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="18" cy="19" r="3" stroke="currentColor" stroke-width="2" fill="none"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-bajar" viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-subir" viewBox="0 0 24 24"><path d="M12 15V4m0 0L8 8m4-4 4 4M5 20h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-salir" viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-etiqueta" viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h3l1.5-2h3L15 6h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><circle cx="12" cy="13" r="3.5" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
     <symbol id="i-reloj" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
   </svg>
   <div class="wrap">
@@ -37,13 +46,24 @@
           <button class="btn primary" id="btn-nuevo" type="button" aria-label="Añadir vino" hidden><svg aria-hidden="true"><use href="#i-mas"/></svg><span class="txt">Añadir vino</span></button>
           <button class="btn ghost icono" id="btn-menu" type="button" aria-label="Más opciones" aria-haspopup="true" aria-expanded="false" hidden><svg aria-hidden="true"><use href="#i-menu"/></svg></button>
           <div class="menu" id="menu" hidden>
-            <button type="button" id="btn-compartir">Compartir bodega</button>
-            <button type="button" id="btn-fotos-todas">Buscar las fotos que faltan</button>
-            <button type="button" id="btn-igualar">Igualar todas las fotos</button>
-            <button type="button" id="btn-recuperar">Recuperar las fotos originales</button>
-            <button type="button" id="btn-exportar">Exportar copia (JSON)</button>
-            <button type="button" id="btn-importar">Importar copia (JSON)</button>
-            <button type="button" id="btn-salir">Cerrar sesión</button>
+            <div class="menu-sec">
+              <p class="menu-tit">Bodega</p>
+              <button type="button" id="btn-compartir"><svg aria-hidden="true"><use href="#i-compartir"/></svg>Compartir bodega</button>
+            </div>
+            <div class="menu-sec">
+              <p class="menu-tit">Fotos</p>
+              <button type="button" id="btn-fotos-todas"><svg aria-hidden="true"><use href="#i-foto"/></svg>Buscar las que faltan</button>
+              <button type="button" id="btn-igualar"><svg aria-hidden="true"><use href="#i-varita"/></svg>Igualar todas</button>
+              <button type="button" id="btn-recuperar"><svg aria-hidden="true"><use href="#i-deshacer"/></svg>Recuperar las originales</button>
+            </div>
+            <div class="menu-sec">
+              <p class="menu-tit">Copias</p>
+              <button type="button" id="btn-exportar" title="Guarda todos tus vinos en un archivo JSON"><svg aria-hidden="true"><use href="#i-bajar"/></svg>Descargar copia</button>
+              <button type="button" id="btn-importar" title="Añade los vinos de un archivo JSON"><svg aria-hidden="true"><use href="#i-subir"/></svg>Cargar copia</button>
+            </div>
+            <div class="menu-sec">
+              <button type="button" id="btn-salir" class="salir"><svg aria-hidden="true"><use href="#i-salir"/></svg>Cerrar sesión</button>
+            </div>
           </div>
           <input type="file" id="file-importar" accept="application/json" hidden>
         </div>
@@ -97,6 +117,7 @@
               <option value="urgencia">Por urgencia</option>
               <option value="anada">Por añada</option>
               <option value="nombre">Por nombre</option>
+              <option value="puntuacion">Por puntuación</option>
             </select>
           </label>
         </div>
@@ -114,7 +135,7 @@
     <form id="form-vino" method="dialog">
       <h2 id="dlg-titulo">Vino</h2>
       <div class="etiqueta-bloque" id="etiqueta-bloque" hidden>
-        <button class="btn primary" type="button" id="btn-etiqueta">Rellenar con una foto de la etiqueta</button>
+        <button class="btn primary" type="button" id="btn-etiqueta"><svg aria-hidden="true"><use href="#i-etiqueta"/></svg>Rellenar con una foto de la etiqueta</button>
         <input type="file" id="file-etiqueta" accept="image/*" hidden>
         <p class="meta" id="etiqueta-estado" role="status"></p>
       </div>
@@ -130,35 +151,59 @@
       </div>
       <div class="grid">
         <label class="full">Nombre del vino<input name="nombre" required></label>
-        <label>Bodega<input name="bodega"></label>
-        <label>Tipo
-          <select name="tipo" required>
-            <option value="tinto">Tinto</option>
-            <option value="blanco">Blanco</option>
-            <option value="espumoso">Espumoso</option>
-            <option value="rosado">Rosado</option>
-            <option value="otro">Otro</option>
-          </select>
-        </label>
+        <fieldset class="full seg" data-campo="tipo">
+          <legend>Tipo</legend>
+          <label><input type="radio" name="tipo" value="tinto" checked required><span>Tinto</span></label>
+          <label><input type="radio" name="tipo" value="blanco"><span>Blanco</span></label>
+          <label><input type="radio" name="tipo" value="espumoso"><span>Espumoso</span></label>
+          <label><input type="radio" name="tipo" value="rosado"><span>Rosado</span></label>
+          <label><input type="radio" name="tipo" value="otro"><span>Otro</span></label>
+        </fieldset>
         <label>Añada<input name="anada" type="number" inputmode="numeric" min="1800" max="2100" placeholder="Sin añada"></label>
-        <label>Botellas<input name="botellas" type="number" inputmode="numeric" min="0" value="1" required></label>
-        <label>Denominación<input name="denominacion"></label>
-        <label>País<input name="pais"></label>
-        <label class="full">Uvas<input name="uvas"></label>
-        <label>Cuándo beber
-          <select name="estado">
-            <option value="">Sin indicar</option>
-            <option value="urg">Urgente</option>
-            <option value="ya">Beber ya</option>
-            <option value="punto">En su punto</option>
-            <option value="guardar">Guardar</option>
-          </select>
-        </label>
-        <label>Ventana<input name="ventana" placeholder="p. ej. hasta 2030"></label>
-        <label class="full">Puntuación<input name="puntuacion"></label>
-        <label class="full">Nota de cata<textarea name="cata" rows="3"></textarea></label>
-        <label class="full">Notas<textarea name="notas" rows="2"></textarea></label>
+        <div class="campo-botellas">
+          <label for="f-botellas">Botellas</label>
+          <div class="contador">
+            <button type="button" data-paso="-1" aria-label="Una botella menos">−</button>
+            <input id="f-botellas" name="botellas" type="number" inputmode="numeric" min="0" value="1" required>
+            <button type="button" data-paso="1" aria-label="Una botella más">+</button>
+          </div>
+        </div>
       </div>
+      <details class="seccion" open>
+        <summary>Origen <span class="resumen-sec"></span></summary>
+        <div class="grid">
+          <label class="full">Bodega<input name="bodega"></label>
+          <label>Denominación<input name="denominacion"></label>
+          <label>País<input name="pais"></label>
+        </div>
+      </details>
+      <details class="seccion" open>
+        <summary>Cuándo beber <span class="resumen-sec"></span></summary>
+        <div class="grid">
+          <fieldset class="full seg" data-campo="estado">
+            <legend>Cuándo beber</legend>
+            <label><input type="radio" name="estado" value="urg"><span>Urgente</span></label>
+            <label><input type="radio" name="estado" value="ya"><span>Beber ya</span></label>
+            <label><input type="radio" name="estado" value="punto"><span>En su punto</span></label>
+            <label><input type="radio" name="estado" value="guardar"><span>Guardar</span></label>
+          </fieldset>
+          <label class="full">Ventana<input name="ventana" placeholder="p. ej. 2026–2032 o hasta 2030"></label>
+        </div>
+      </details>
+      <details class="seccion" data-plegable>
+        <summary>Uvas y puntuación <span class="resumen-sec"></span></summary>
+        <div class="grid">
+          <label class="full">Uvas<input name="uvas"></label>
+          <label class="full">Puntuación<input name="puntuacion" placeholder="p. ej. Peñín 92 · Vivino 4,1/5"></label>
+        </div>
+      </details>
+      <details class="seccion" data-plegable>
+        <summary>Cata y notas <span class="resumen-sec"></span></summary>
+        <div class="grid">
+          <label class="full">Nota de cata<textarea name="cata" rows="3"></textarea></label>
+          <label class="full">Notas<textarea name="notas" rows="2"></textarea></label>
+        </div>
+      </details>
       <div class="dlg-acciones">
         <button class="btn danger" type="button" id="btn-borrar">Borrar</button>
         <span class="sp"></span>
