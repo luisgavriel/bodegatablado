@@ -197,6 +197,13 @@ textarea { resize: vertical; }
   font: 500 13.5px/1 var(--font-ui); border-radius: 999px; padding: 8px 12px 8px 30px; background: transparent;
 }
 
+/* Interruptor lista/galería. */
+.vistas { flex: none; display: flex; gap: 2px; padding: 3px; border: 1px solid var(--rule); border-radius: 999px; }
+.vista { display: grid; place-items: center; width: 30px; height: 28px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; }
+.vista svg { width: 15px; height: 15px; }
+.vista[aria-pressed="true"] { background: var(--raised); color: var(--ink); box-shadow: 0 1px 3px rgb(0 0 0 / .18); }
+.vista:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 .vacio { display: grid; gap: 12px; justify-items: start; background: var(--surface); padding: 20px; border-radius: 14px; }
 .vacio p { margin: 0; }
 
@@ -282,6 +289,35 @@ img.orig { mix-blend-mode: var(--fundir, normal); padding: 4px; }
 .linea.punto { --w: var(--punto); }
 .linea.guardar { --w: var(--guardar); }
 
+.foto { position: relative; }
+.foto[data-ficha] { cursor: pointer; }
+.qty { display: none; }
+
+/* Galería: cada vino como una tarjeta con la botella arriba. Reutiliza la
+   misma fila de la lista y solo cambia la disposición. */
+#lista.galeria .ledger { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+#lista.galeria .wine {
+  display: flex; flex-direction: column; align-items: stretch; gap: 0; padding: 0; overflow: hidden;
+  box-shadow: var(--sombra); transition: transform .2s ease, box-shadow .2s ease;
+}
+@media (hover: hover) { #lista.galeria .wine:hover { transform: translateY(-3px); } }
+#lista.galeria .foto { width: 100%; height: 200px; border-radius: 0; }
+#lista.galeria .foto img { padding: 14px 0 10px; }
+#lista.galeria .foto .botella { width: 60px; height: 164px; }
+#lista.galeria .qty {
+  display: block; position: absolute; top: 10px; right: 10px;
+  background: rgb(0 0 0 / .55); color: #fff; border-radius: 999px; font-size: 12px; font-weight: 600; padding: 2px 9px;
+  font-variant-numeric: tabular-nums;
+}
+#lista.galeria .main { padding: 12px 14px 0; gap: 3px; flex: 1; align-content: start; }
+#lista.galeria .name { font-size: 17px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+#lista.galeria .meta { font-size: 12.5px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+#lista.galeria .uvas, #lista.galeria .linea, #lista.galeria .sello, #lista.galeria .vivino, #lista.galeria .score { display: none; }
+#lista.galeria .eval { margin-top: 4px; min-width: 0; }
+#lista.galeria .win { min-width: 0; }
+#lista.galeria .stock-col { padding: 10px 14px 14px; justify-items: start; }
+#lista.galeria .stock { flex-direction: row; }
+
 /* Contador de botellas en una sola píldora. */
 .stock {
   display: flex; align-items: center; gap: 2px; padding: 3px;
@@ -331,9 +367,80 @@ dialog::backdrop { background: rgb(10 4 6 / .55); -webkit-backdrop-filter: blur(
 .nuevo-miembro { display: flex; flex-wrap: wrap; gap: 8px; }
 .nuevo-miembro input { flex: 1 1 220px; }
 .nuevo-miembro select { width: auto; }
-.solo-ver .step, .solo-ver #btn-nuevo { display: none; }
+.solo-ver .step, .solo-ver #btn-nuevo, .solo-ver .fab, .solo-ver .ficha .editar, .solo-ver .ficha .abrir { display: none; }
 .dlg-acciones { display: flex; gap: 8px; align-items: center; }
 .dlg-acciones .sp { flex: 1; }
+
+/* Ficha del vino. */
+dialog.ficha {
+  outline: none;
+  margin: 0 0 0 auto; width: min(460px, 100vw); max-width: 100vw; height: 100dvh; max-height: 100dvh;
+  border-radius: 22px 0 0 22px; overflow: hidden;
+}
+.ficha-cuerpo {
+  height: 100%; overflow-y: auto; overscroll-behavior: contain; position: relative;
+  display: grid; align-content: start; gap: 16px;
+  padding: max(16px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+}
+.ficha .asa { display: none; }
+.ficha .cerrar { position: absolute; top: max(12px, env(safe-area-inset-top)); right: 12px; z-index: 1; width: 38px; height: 38px; background: color-mix(in srgb, var(--raised) 70%, transparent); }
+.ficha .ficha-foto { width: 100%; height: 300px; border-radius: 18px; }
+.ficha .ficha-foto img { padding: 18px 0 14px; }
+.ficha .ficha-foto .botella { width: 80px; height: 220px; }
+.ficha-texto { display: grid; gap: 4px; min-width: 0; }
+.ficha-nombre { font-size: 28px; line-height: 1.15; display: block; text-wrap: balance; }
+.ficha-nombre .anada { font: 500 16px var(--font-ui); color: var(--muted); margin-left: 10px; font-variant-numeric: tabular-nums; }
+.ficha .linea { max-width: none; margin-top: 12px; }
+.ficha .linea .barra { height: 7px; }
+.ficha .win { white-space: normal; }
+.ficha-bloque { margin-top: 14px; display: grid; gap: 4px; }
+.ficha-bloque h3 { margin: 0; font: 600 11.5px var(--font-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.ficha-bloque p { margin: 0; }
+.ficha .cata { font: italic 17px/1.5 var(--font-display); }
+.ficha-acciones {
+  position: sticky; bottom: calc(-1 * max(20px, env(safe-area-inset-bottom)));
+  margin: 4px -20px calc(-1 * max(20px, env(safe-area-inset-bottom)));
+  padding: 14px 20px max(20px, env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: linear-gradient(transparent, var(--raised) 22%);
+}
+.ficha-acciones .sp { flex: 1; }
+.ficha-acciones .stock { flex-direction: row; }
+.btn:disabled { opacity: .45; cursor: default; box-shadow: none; }
+@media (max-width: 699px) {
+  dialog.ficha {
+    margin: auto 0 0; width: 100vw; height: auto; max-height: 92dvh; border-radius: 22px 22px 0 0;
+    transition: transform .2s ease;
+  }
+  .ficha-cuerpo { max-height: 92dvh; padding-top: 10px; }
+  .ficha .asa { display: block; justify-self: center; width: 40px; height: 5px; border-radius: 5px; background: var(--rule); margin-bottom: -4px; }
+  .ficha .cerrar { top: 22px; right: 28px; }
+  .ficha .ficha-foto { height: 240px; }
+  .ficha .ficha-foto .botella { width: 66px; height: 180px; }
+  .ficha-nombre { font-size: 25px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  dialog.ficha[open] { animation: entrar-lado .32s cubic-bezier(.2, .8, .2, 1); }
+  dialog.ficha[open]::backdrop { animation: aparecer .32s ease; }
+  @media (max-width: 699px) { dialog.ficha[open] { animation-name: entrar-abajo; } }
+  #dlg[open] { animation: aparecer-escala .22s ease-out; }
+  @keyframes entrar-lado { from { transform: translateX(100%); } }
+  @keyframes entrar-abajo { from { transform: translateY(100%); } }
+  @keyframes aparecer { from { opacity: 0; } }
+  @keyframes aparecer-escala { from { opacity: 0; transform: scale(.97); } }
+}
+
+/* Botón flotante para añadir, solo en el móvil. */
+.fab {
+  position: fixed; z-index: 6;
+  right: max(18px, calc(env(safe-area-inset-right) + 12px)); bottom: max(18px, calc(env(safe-area-inset-bottom) + 12px));
+  width: 58px; height: 58px; border: 0; border-radius: 20px; cursor: pointer;
+  display: none; place-items: center; background: var(--accent); color: var(--accent-ink);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 45%, transparent), 0 2px 6px rgb(0 0 0 / .25);
+}
+.fab svg { width: 24px; height: 24px; }
+.fab:active { transform: scale(.94); }
+.fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 .toast {
   position: fixed; left: 50%; bottom: max(20px, env(safe-area-inset-bottom)); transform: translateX(-50%);
@@ -359,8 +466,18 @@ dialog::backdrop { background: rgb(10 4 6 / .55); -webkit-backdrop-filter: blur(
   .grid { grid-template-columns: 1fr; }
   .name { font-size: 18px; }
   .total { font-size: 38px; }
-  #btn-nuevo { width: 42px; height: 42px; padding: 0; }
-  #btn-nuevo .txt { display: none; }
+  #btn-nuevo { display: none; }
+  .fila-filtros { flex-wrap: wrap; }
+  .filters { flex-basis: 100%; }
+  .orden { margin-left: auto; }
+  .fab { display: grid; }
+  .wrap { padding-bottom: 96px; }
+  .toast { bottom: max(90px, calc(env(safe-area-inset-bottom) + 84px)); }
+  #lista.galeria .ledger { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  #lista.galeria .foto { height: 170px; }
+  #lista.galeria .name { font-size: 16px; }
+  #lista.galeria .main { padding: 10px 12px 0; }
+  #lista.galeria .stock-col { padding: 8px 12px 12px; }
   .title-row { flex-wrap: nowrap; }
 }
 

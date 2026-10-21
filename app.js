@@ -19,6 +19,13 @@ let filtro = "todo";
 let busqueda = "";
 let orden = "tipo";
 let editando = null;
+let fichaId = null;
+// Lista o galería. Se recuerda en este navegador; sin preferencia, galería
+// en pantallas anchas y lista en el móvil.
+let vista = (() => {
+  try { const v = localStorage.getItem("bodega-vista"); if (v === "lista" || v === "galeria") return v; } catch {}
+  return window.matchMedia("(min-width: 900px)").matches ? "galeria" : "lista";
+})();
 let acceso = { rol: "dueno" };
 const soloVer = () => acceso.rol === "lector";
 
@@ -137,8 +144,8 @@ function filaVino(v) {
   const puntos = puntuacionHtml(v.puntuacion);
   return `
     <li class="wine${v.botellas === 0 ? " agotado" : ""}" data-id="${v.id}">
-      <div class="foto ${esc(v.tipo)}">${imagen(v)}</div>
-      <div class="main" data-editar>
+      <div class="foto ${esc(v.tipo)}" data-ficha>${imagen(v)}<span class="qty" aria-hidden="true">×${v.botellas}</span></div>
+      <div class="main" data-ficha>
         <p class="name">${esc(v.nombre)}<span class="anada">${v.anada ?? "s/a"}</span></p>
         ${meta ? `<p class="meta">${esc(meta)}</p>` : ""}
         ${v.uvas ? `<p class="meta uvas">${esc(v.uvas)}</p>` : ""}
@@ -154,6 +161,51 @@ function filaVino(v) {
         <button class="step" type="button" data-delta="1" aria-label="Añadir una botella">+</button>
       </div></div>
     </li>`;
+}
+
+// Ficha del vino: panel que sube desde abajo en el móvil y entra por la
+// derecha en el ordenador.
+function pintarFicha() {
+  const v = vinos.find((x) => x.id === fichaId);
+  if (!v) { if ($("#ficha").open) $("#ficha").close(); return; }
+  const meta = [v.bodega, v.denominacion, v.pais].filter(Boolean).join(" · ");
+  const ventana = v.estado ? `${ESTADOS[v.estado]}${v.ventana ? " · " + v.ventana : ""}` : v.ventana;
+  const puntos = puntuacionHtml(v.puntuacion);
+  $("#ficha").innerHTML = `
+    <div class="ficha-cuerpo">
+      <span class="asa" aria-hidden="true"></span>
+      <button class="btn ghost icono cerrar" type="button" data-cerrar aria-label="Cerrar"><svg aria-hidden="true"><use href="#i-cerrar"/></svg></button>
+      <div class="foto ficha-foto ${esc(v.tipo)}">${imagen(v)}</div>
+      <div class="ficha-texto">
+        <h2 class="ficha-nombre">${esc(v.nombre)}<span class="anada">${v.anada ?? "s/a"}</span></h2>
+        ${meta ? `<p class="meta">${esc(meta)}</p>` : ""}
+        ${v.uvas ? `<p class="meta uvas">${esc(v.uvas)}</p>` : ""}
+        ${ventana || puntos ? `<p class="eval">${ventana ? `<span class="win ${esc(v.estado ?? "")}">${esc(ventana)}</span>` : ""}${puntos}</p>` : ""}
+        ${lineaHtml(v)}
+        ${v.cata ? `<div class="ficha-bloque"><h3>Nota de cata</h3><p class="cata">${esc(v.cata)}</p></div>` : ""}
+        ${v.notas ? `<div class="ficha-bloque"><h3>Notas</h3><p>${esc(v.notas)}</p></div>` : ""}
+      </div>
+      <div class="ficha-acciones">
+        <div class="stock">
+          <button class="step" type="button" data-delta="-1" aria-label="Quitar una botella" ${v.botellas === 0 ? "disabled" : ""}>−</button>
+          <span class="n" aria-label="${v.botellas} ${v.botellas === 1 ? "botella" : "botellas"}">${v.botellas}</span>
+          <button class="step" type="button" data-delta="1" aria-label="Añadir una botella">+</button>
+        </div>
+        <span class="sp"></span>
+        <button class="btn ghost editar" type="button" data-editar><svg aria-hidden="true"><use href="#i-editar"/></svg>Editar</button>
+        <button class="btn primary abrir" type="button" data-abrir ${v.botellas === 0 ? "disabled" : ""}><svg aria-hidden="true"><use href="#i-copa"/></svg>Abrir una</button>
+      </div>
+    </div>`;
+}
+
+function abrirFicha(v) {
+  fichaId = v.id;
+  pintarFicha();
+  const d = $("#ficha");
+  if (!d.open) d.showModal();
+  d.querySelector(".ficha-cuerpo").scrollTop = 0;
+  // El foco va al panel y no al botón de cerrar, para que no salga resaltado.
+  d.focus();
 }
 
 function render() {
@@ -198,6 +250,9 @@ function render() {
     html = ordenados.length ? `<section class="grupo"><ol class="ledger">${ordenados.map(filaVino).join("")}</ol></section>` : "";
   }
   $("#lista").innerHTML = html || (vinos.length ? `<p class="meta">Ningún vino coincide.</p>` : "");
+  $("#lista").classList.toggle("galeria", vista === "galeria");
+  for (const b of document.querySelectorAll(".vista")) b.setAttribute("aria-pressed", String(b.dataset.vista === vista));
+  if ($("#ficha").open) pintarFicha();
 }
 
 // ---- Fotos ----
@@ -493,20 +548,22 @@ async function borrar() {
 }
 
 async function cambiarBotellas(id, delta) {
-  if (soloVer()) return;
+  if (soloVer()) return false;
   const v = vinos.find((x) => x.id === id);
   const nuevo = Math.max(0, v.botellas + delta);
-  if (nuevo === v.botellas) return;
+  if (nuevo === v.botellas) return false;
   const antes = v.botellas;
   v.botellas = nuevo;
   render();
-  document.querySelector(`.wine[data-id="${CSS.escape(String(id))}"] .n`)?.classList.add("cambio");
+  for (const n of document.querySelectorAll(`.wine[data-id="${CSS.escape(String(id))}"] .n, #ficha[open] .n`)) n.classList.add("cambio");
   try {
     await store.actualizar(id, { botellas: nuevo });
+    return true;
   } catch (err) {
     v.botellas = antes;
     render();
     fallo(err);
+    return false;
   }
 }
 
@@ -601,6 +658,7 @@ async function mostrar(usuario) {
   $("#login").hidden = dentro;
   $("#app").hidden = !dentro;
   $("#btn-nuevo").hidden = !dentro;
+  $("#btn-fab").hidden = !dentro;
   $("#btn-menu").hidden = !dentro;
   $("#btn-salir").hidden = store.modo === "local";
   if (!dentro) return;
@@ -665,10 +723,56 @@ function enlazar() {
     if (!fila) return;
     const paso = e.target.closest(".step");
     if (paso) return cambiarBotellas(fila.dataset.id, Number(paso.dataset.delta));
-    if (e.target.closest("[data-editar]")) abrirDialogo(vinos.find((v) => v.id === fila.dataset.id));
+    if (e.target.closest("[data-ficha]")) abrirFicha(vinos.find((v) => v.id === fila.dataset.id));
+  });
+
+  $(".vistas").addEventListener("click", (e) => {
+    const b = e.target.closest(".vista");
+    if (!b || b.dataset.vista === vista) return;
+    vista = b.dataset.vista;
+    try { localStorage.setItem("bodega-vista", vista); } catch {}
+    if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) document.startViewTransition(render);
+    else render();
+  });
+
+  const ficha = $("#ficha");
+  ficha.addEventListener("click", async (e) => {
+    // Un toque fuera del panel (en el fondo oscuro) lo cierra.
+    if (e.target === ficha) return ficha.close();
+    const v = vinos.find((x) => x.id === fichaId);
+    if (!v) return;
+    if (e.target.closest("[data-cerrar]")) return ficha.close();
+    const paso = e.target.closest(".step");
+    if (paso) return cambiarBotellas(v.id, Number(paso.dataset.delta));
+    if (e.target.closest("[data-abrir]")) {
+      if (!(await cambiarBotellas(v.id, -1))) return;
+      return toast(v.botellas ? `Salud. ${v.botellas === 1 ? "Queda 1 botella" : `Quedan ${v.botellas} botellas`}` : "Salud. Era la última botella");
+    }
+    if (e.target.closest("[data-editar]")) { ficha.close(); abrirDialogo(v); }
+  });
+  ficha.addEventListener("close", () => { fichaId = null; });
+  // En el móvil, arrastrar el panel hacia abajo lo cierra.
+  let arrastre = null;
+  ficha.addEventListener("touchstart", (e) => {
+    const cuerpo = ficha.querySelector(".ficha-cuerpo");
+    if (!matchMedia("(max-width: 699px)").matches || cuerpo.scrollTop > 0 || e.target.closest("button")) return;
+    arrastre = { y: e.touches[0].clientY, dy: 0 };
+  }, { passive: true });
+  ficha.addEventListener("touchmove", (e) => {
+    if (!arrastre) return;
+    arrastre.dy = Math.max(0, e.touches[0].clientY - arrastre.y);
+    ficha.style.transform = `translateY(${arrastre.dy}px)`;
+  }, { passive: true });
+  ficha.addEventListener("touchend", () => {
+    if (!arrastre) return;
+    const cerrar = arrastre.dy > 110;
+    arrastre = null;
+    ficha.style.transform = "";
+    if (cerrar) ficha.close();
   });
 
   $("#btn-nuevo").addEventListener("click", () => abrirDialogo(null));
+  $("#btn-fab").addEventListener("click", () => abrirDialogo(null));
   $("#form-vino").addEventListener("submit", guardar);
   $("#btn-cancelar").addEventListener("click", () => $("#dlg").close());
   $("#btn-borrar").addEventListener("click", borrar);
