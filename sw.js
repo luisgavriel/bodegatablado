@@ -1,6 +1,6 @@
 // Guarda la app en caché para que abra rápido y sin conexión.
 // Los datos de Supabase siempre se piden a la red.
-const CACHE = "bodega-v2";
+const CACHE = "bodega-v3";
 const FILES = ["./", "index.html", "styles.css", "app.js", "store.js", "config.js",
   "vinos-iniciales.json", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png"];
 
@@ -19,8 +19,10 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin) return;
   // Red primero, caché si no hay conexión.
+  // "no-cache" revalida con el servidor para no servir una versión vieja
+  // desde la caché HTTP del navegador.
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: "no-cache" })
       .then((res) => {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(e.request, copy));
