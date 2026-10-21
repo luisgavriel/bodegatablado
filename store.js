@@ -19,7 +19,9 @@ export async function vinosIniciales() {
 
 // ---- Supabase ----
 async function crearStoreSupabase() {
-  const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm");
+  // vendor/supabase.js (supabase-js 2.117.2, versión UMD) se carga desde
+  // index.html y deja el cliente en window.supabase.
+  const { createClient } = window.supabase;
   const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const check = ({ data, error }) => { if (error) throw error; return data; };
 

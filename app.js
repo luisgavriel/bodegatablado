@@ -302,8 +302,12 @@ async function mostrar(usuario) {
   try {
     vinos = await store.listar();
   } catch (err) {
-    fallo(err);
-    vinos = [];
+    console.error(err);
+    const aviso = $("#aviso-demo");
+    aviso.textContent = "No se pudieron leer tus vinos: " + (err.message || err) + ". Recarga la página.";
+    aviso.hidden = false;
+    $("#app").hidden = true;
+    return;
   }
   render();
 }
@@ -368,7 +372,15 @@ function enlazar() {
 
 async function iniciar() {
   enlazar();
-  store = await crearStore();
+  try {
+    store = await crearStore();
+  } catch (err) {
+    console.error(err);
+    const aviso = $("#aviso-demo");
+    aviso.textContent = "No se pudo conectar con la base de datos: " + (err.message || err) + ". Recarga la página.";
+    aviso.hidden = false;
+    return;
+  }
   $("#aviso-demo").hidden = store.modo !== "local";
   store.onAuth((u) => mostrar(u));
   await mostrar(await store.usuario());
