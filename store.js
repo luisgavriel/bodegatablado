@@ -89,6 +89,15 @@ async function crearStoreSupabase() {
       async buscar(id) { return (await this.llamar({ accion: "buscar", vino_id: id })).candidatas; },
       async guardar(id, url) { return (await this.llamar({ accion: "guardar", vino_id: id, url })).imagen_url; },
       async auto(id) { return (await this.llamar({ accion: "auto", vino_id: id })).imagen_url; },
+      async subir(id, blob) {
+        const datos = await new Promise((ok, mal) => {
+          const lector = new FileReader();
+          lector.onload = () => ok(String(lector.result).split(",")[1]);
+          lector.onerror = () => mal(lector.error);
+          lector.readAsDataURL(blob);
+        });
+        return (await this.llamar({ accion: "subir", vino_id: id, datos, tipo: blob.type })).imagen_url;
+      },
     },
   };
 }

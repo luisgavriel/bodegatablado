@@ -1,4 +1,5 @@
 import { crearStore, vinosIniciales } from "./store.js";
+import { normalizar, estaNormalizada } from "./normalizar.js";
 
 const TIPOS = [
   ["tinto", "Tintos"], ["blanco", "Blancos"], ["espumoso", "Espumosos"],
@@ -75,9 +76,7 @@ function filaVino(v) {
   const ventana = v.estado ? `${ESTADOS[v.estado]}${v.ventana ? " · " + v.ventana : ""}` : v.ventana;
   return `
     <li class="wine${v.botellas === 0 ? " agotado" : ""}" data-id="${v.id}">
-      <div class="foto">${v.imagen_url
-        ? `<img src="${esc(v.imagen_url)}" alt="" loading="lazy">`
-        : botella(v)}</div>
+      <div class="foto ${esc(v.tipo)}">${imagen(v)}</div>
       <div class="main" data-editar>
         <p class="name">${esc(v.nombre)}<span class="anada">${v.anada ?? "s/a"}</span></p>
         ${meta ? `<p class="meta">${esc(meta)}</p>` : ""}
@@ -131,8 +130,47 @@ function render() {
 }
 
 // ---- Fotos ----
+function imagen(v) {
+  if (!v.imagen_url) return botella(v);
+  const clase = estaNormalizada(v.imagen_url) ? "norm" : "orig";
+  return `<img class="${clase}" src="${esc(v.imagen_url)}" alt="" loading="lazy">`;
+}
+
 function pintarFotoActual(v) {
-  $("#foto-actual").innerHTML = v.imagen_url ? `<img src="${esc(v.imagen_url)}" alt="">` : botella(v);
+  $("#foto-actual").className = `foto-grande ${v.tipo}`;
+  $("#foto-actual").innerHTML = imagen(v);
+}
+
+// Quita el fondo y centra la botella en el lienzo común. Devuelve null si ha
+// ido bien o el mensaje de error; si falla, el vino conserva la foto original.
+async function igualarFoto(v, progreso) {
+  try {
+    const blob = await normalizar(v.imagen_url, { progreso });
+    ponerFoto(v.id, await store.fotos.subir(v.id, blob));
+    render();
+    return null;
+  } catch (err) {
+    console.warn("No se pudo igualar", v.nombre, err);
+    return err.message || String(err);
+  }
+}
+
+async function igualarTodas() {
+  const pendientes = vinos.filter((v) => v.imagen_url && !estaNormalizada(v.imagen_url));
+  if (!pendientes.length) return toast("Todas las fotos están igualadas");
+  const fallos = [];
+  for (const [i, v] of pendientes.entries()) {
+    const paso = `Igualando fotos… ${i + 1} de ${pendientes.length}`;
+    toast(paso, true);
+    const error = await igualarFoto(v, (msg) => toast(`${paso} · ${msg}`, true));
+    if (error) fallos.push(`${v.nombre}: ${error}`);
+    if (fallos.length === 3 && i === 2) {
+      toast("No se pudieron igualar las fotos");
+      return avisar("No se pudieron igualar las fotos. Error: " + error);
+    }
+  }
+  toast(`${pendientes.length - fallos.length} fotos igualadas` + (fallos.length ? `, ${fallos.length} con error` : ""));
+  if (fallos.length) avisar(`Sin igualar (${fallos.length}): ` + fallos.join(" · "));
 }
 
 function ponerFoto(id, imagen_url) {
@@ -163,8 +201,11 @@ async function buscarFotos() {
         const url = await store.fotos.guardar(vino.id, c.url).catch(() => store.fotos.guardar(vino.id, c.miniatura));
         pintarFotoActual(ponerFoto(vino.id, url));
         $("#candidatas").innerHTML = "";
-        estado.textContent = "Foto guardada.";
         render();
+        estado.textContent = "Quitando el fondo…";
+        const error = await igualarFoto(vinos.find((x) => x.id === vino.id), (msg) => (estado.textContent = msg));
+        pintarFotoActual(vinos.find((x) => x.id === vino.id));
+        estado.textContent = error ? "Foto guardada sin quitar el fondo: " + error : "Foto guardada.";
       } catch (err) { estado.textContent = "No se pudo guardar: " + err.message; }
     };
   } catch (err) {
@@ -173,10 +214,12 @@ async function buscarFotos() {
 }
 
 // Devuelve null si ha guardado la foto, o el mensaje de error.
-async function fotoAutomatica(id) {
+async function fotoAutomatica(id, progreso) {
   try {
-    ponerFoto(id, await store.fotos.auto(id));
+    const v = ponerFoto(id, await store.fotos.auto(id));
     render();
+    // Si no se puede quitar el fondo, se queda la foto original.
+    await igualarFoto(v, progreso);
     return null;
   } catch (err) {
     console.warn("Sin foto para", id, err);
@@ -196,8 +239,9 @@ async function fotosQueFaltan() {
   let hechas = 0;
   const fallos = [];
   for (const [i, v] of pendientes.entries()) {
-    toast(`Buscando fotos… ${i + 1} de ${pendientes.length} · ${hechas} guardadas`, true);
-    const error = await fotoAutomatica(v.id);
+    const paso = `Buscando fotos… ${i + 1} de ${pendientes.length} · ${hechas} guardadas`;
+    toast(paso, true);
+    const error = await fotoAutomatica(v.id, (msg) => toast(`${paso} · ${msg}`, true));
     if (error) fallos.push(`${v.nombre}: ${error}`);
     else hechas++;
     // Si las tres primeras fallan, el problema es de configuración: parar y enseñarlo.
@@ -389,6 +433,7 @@ async function mostrar(usuario) {
     : "";
   $("#btn-compartir").hidden = !store.miembros || ajena;
   $("#btn-fotos-todas").hidden = !store.fotos || soloVer();
+  $("#btn-igualar").hidden = !store.fotos || soloVer();
   $("#btn-importar").hidden = soloVer();
   $("#btn-cargar-iniciales").hidden = ajena;
   try {
@@ -441,6 +486,7 @@ function enlazar() {
   document.addEventListener("click", () => { menu.hidden = true; });
   $("#btn-exportar").addEventListener("click", exportar);
   $("#btn-fotos-todas").addEventListener("click", fotosQueFaltan);
+  $("#btn-igualar").addEventListener("click", igualarTodas);
   $("#btn-buscar-fotos").addEventListener("click", buscarFotos);
   $("#btn-importar").addEventListener("click", () => $("#file-importar").click());
   $("#file-importar").addEventListener("change", (e) => {

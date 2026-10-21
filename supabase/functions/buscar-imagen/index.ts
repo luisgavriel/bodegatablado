@@ -4,6 +4,8 @@
 // POST { accion: "buscar", vino_id }        → { candidatas: [{ url, miniatura, titulo }] }
 // POST { accion: "guardar", vino_id, url }  → { imagen_url }
 // POST { accion: "auto", vino_id }          → { imagen_url } (busca y guarda la primera que se pueda descargar)
+// POST { accion: "subir", vino_id, datos, tipo } → { imagen_url } (foto ya normalizada en el navegador,
+//                                               en base64; tipo image/webp o image/png)
 //
 // Secretos necesarios: BRAVE_API_KEY. Las claves de Supabase las pone
 // Supabase automáticamente.
@@ -77,7 +79,14 @@ async function descargar(url: string): Promise<{ bytes: Uint8Array; tipo: string
 
 async function guardar(admin: ReturnType<typeof createClient>, vino: Vino, url: string) {
   const { bytes, tipo } = await descargar(url);
-  const ruta = `${vino.user_id}/${vino.id}-${Date.now()}.${EXTENSIONES[tipo]}`;
+  return guardarBytes(admin, vino, bytes, tipo, "");
+}
+
+// sufijo "-n" marca las fotos normalizadas (sin fondo, lienzo 300×900).
+async function guardarBytes(
+  admin: ReturnType<typeof createClient>, vino: Vino, bytes: Uint8Array, tipo: string, sufijo: string,
+) {
+  const ruta = `${vino.user_id}/${vino.id}-${Date.now()}${sufijo}.${EXTENSIONES[tipo]}`;
   const subida = await admin.storage.from("fotos").upload(ruta, bytes, { contentType: tipo, upsert: true });
   if (subida.error) throw subida.error;
   const imagen_url = admin.storage.from("fotos").getPublicUrl(ruta).data.publicUrl;
@@ -96,7 +105,8 @@ async function guardar(admin: ReturnType<typeof createClient>, vino: Vino, url: 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
-    const { accion, vino_id, url } = await req.json();
+    const cuerpo = await req.json();
+    const { accion, vino_id, url } = cuerpo;
 
     // Cliente con la sesión del usuario: las políticas RLS garantizan que
     // solo puede tocar sus propios vinos.
@@ -124,6 +134,16 @@ Deno.serve(async (req) => {
     if (accion === "guardar") {
       if (typeof url !== "string") return respuesta({ error: "Falta la URL" }, 400);
       return respuesta({ imagen_url: await guardar(admin, vino, url) });
+    }
+
+    if (accion === "subir") {
+      const { datos, tipo } = cuerpo;
+      if (tipo !== "image/webp" && tipo !== "image/png") return respuesta({ error: "Formato no admitido" }, 400);
+      if (typeof datos !== "string" || datos.length > MAX_BYTES * 1.4) {
+        return respuesta({ error: "Imagen vacía o demasiado grande" }, 400);
+      }
+      const bytes = Uint8Array.from(atob(datos), (c) => c.charCodeAt(0));
+      return respuesta({ imagen_url: await guardarBytes(admin, vino, bytes, tipo, "-n") });
     }
 
     if (accion === "auto") {

@@ -18,6 +18,11 @@
   --punto-bg: #dcebe1;
   --guardar: #3c4f8f;
   --guardar-bg: #e0e5f4;
+  --tinto-bg: #f1e2e4;
+  --blanco-bg: #f4eedb;
+  --espumoso-bg: #f2ecd6;
+  --rosado-bg: #f7e6ec;
+  --fundir: multiply;
   --font-display: "Newsreader", Georgia, serif;
   --font-ui: "Instrument Sans", system-ui, -apple-system, sans-serif;
   --font-num: "IBM Plex Mono", ui-monospace, Menlo, monospace;
@@ -44,6 +49,11 @@
     --punto-bg: #1d3226;
     --guardar: #a9b8f0;
     --guardar-bg: #232a45;
+    --tinto-bg: #2b1c20;
+    --blanco-bg: #2a2619;
+    --espumoso-bg: #2a2717;
+    --rosado-bg: #2d2025;
+    --fundir: normal;
     color-scheme: dark;
   }
 }
@@ -137,8 +147,19 @@ textarea { resize: vertical; }
   border-bottom: 1px solid var(--rule);
 }
 .wine.agotado { opacity: .55; }
+/* Las fotos van sobre una tarjeta con el color del tipo de vino. Las igualadas
+   (sin fondo, lienzo 300×900) llevan sombra; las originales usan multiply
+   para que los fondos blancos se fundan con la tarjeta. */
+.foto, .foto-grande { border-radius: 8px; background: var(--tarjeta, var(--surface)); overflow: hidden; }
+.foto.tinto, .foto-grande.tinto { --tarjeta: var(--tinto-bg); }
+.foto.blanco, .foto-grande.blanco { --tarjeta: var(--blanco-bg); }
+.foto.espumoso, .foto-grande.espumoso { --tarjeta: var(--espumoso-bg); }
+.foto.rosado, .foto-grande.rosado { --tarjeta: var(--rosado-bg); }
 .foto { width: 44px; height: 110px; display: grid; place-items: center; }
-.foto img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.foto img { width: 100%; height: 100%; object-fit: contain; }
+img.norm { filter: drop-shadow(0 2px 3px rgb(0 0 0 / .28)); }
+img.orig { mix-blend-mode: var(--fundir, normal); padding: 3px; }
+.foto .botella { width: 36px; height: 100px; }
 .botella { width: 40px; height: 110px; --c: var(--muted); }
 .botella.tinto { --c: var(--tinto); }
 .botella.blanco { --c: var(--blanco); }
@@ -182,8 +203,8 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .grid .full { grid-column: 1 / -1; }
 .fotos-bloque { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px 16px; align-items: center; }
 .foto-grande { width: 64px; height: 160px; display: grid; place-items: center; }
-.foto-grande img { max-width: 100%; max-height: 100%; object-fit: contain; }
-.foto-grande .botella { width: 58px; height: 160px; }
+.foto-grande img { width: 100%; height: 100%; object-fit: contain; }
+.foto-grande .botella { width: 52px; height: 148px; }
 .fotos-acciones { display: grid; gap: 6px; justify-items: start; }
 .candidatas { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
 .candidatas:empty { display: none; }
@@ -213,7 +234,7 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 @media (max-width: 520px) {
   .wine { grid-template-columns: 34px minmax(0, 1fr) auto; }
   .foto { width: 34px; height: 86px; }
-  .botella { width: 31px; height: 86px; }
+  .foto .botella { width: 28px; height: 78px; }
   .grid { grid-template-columns: 1fr; }
   .name { font-size: 18px; }
   .btn.primary#btn-nuevo { padding: 10px 14px; }

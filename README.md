@@ -46,6 +46,14 @@ y guarda la elegida en la carpeta pública `fotos` de Supabase Storage.
 En la app: al añadir un vino se busca su foto sola; en la ficha de cada vino, *Buscar otra foto*;
 y en el menú ⋯, *Buscar las fotos que faltan*. Sin foto se muestra una botella dibujada.
 
+## Fotos uniformes
+
+Cada foto guardada se iguala en el navegador (`normalizar.js`): se le quita el fondo con
+[@imgly/background-removal](https://github.com/imgly/background-removal-js) (modelo pequeño, unos 40 MB que se
+descargan la primera vez y quedan en caché), se recorta y se centra en un lienzo transparente de 300×900, y se
+sube como WebP con la acción `subir` de `buscar-imagen` (archivos acabados en `-n.webp`). En el menú ⋯,
+*Igualar todas las fotos* procesa las que ya estaban guardadas. Si algo falla, el vino conserva la foto original.
+
 ## Compartir la bodega
 
 En Supabase, *SQL Editor*: pega `supabase/compartir.sql` y pulsa *Run*. Después, en la app, menú ⋯ →
