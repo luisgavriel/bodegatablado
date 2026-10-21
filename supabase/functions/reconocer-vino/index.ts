@@ -48,16 +48,14 @@ const ESQUEMA = {
     denominacion: texto("Denominación de origen o región, p. ej. «Rioja DOCa» o «Champagne AOC»"),
     pais: texto("País en español"),
     uvas: texto("Variedades separadas por comas; vacío si no las sabes con razonable seguridad"),
-    estado: {
-      type: "string",
-      enum: ["urg", "ya", "punto", "guardar", ""],
-      description: "Cuándo beberlo hoy: urg (está pasándose), ya, punto (en su mejor momento), guardar, o vacío si no se sabe",
-    },
-    ventana: texto("Ventana de consumo breve, p. ej. «2026–2032» o «hasta 2028»; vacío si no se sabe"),
+    ventana_desde: texto("Año desde el que conviene beberlo (4 cifras); vacío si ya se puede beber o no se sabe"),
+    ventana_hasta: texto("Último año recomendado para beberlo (4 cifras); vacío si no se sabe"),
     cata: texto("Nota de cata orientativa de 1 o 2 frases sobre el estilo habitual de este vino; vacío si no lo conoces"),
+    puntuacion_etiqueta: texto("Puntuaciones o medallas que se leen en la foto (pegatinas, collarines), p. ej. «Parker 95 · Peñín 93»; vacío si no hay"),
+    puntuacion_estimada: texto("Si la foto no muestra puntuaciones: las de críticos que recuerdes para este vino y añada, p. ej. «Parker 94 · Peñín 92»; vacío si no las conoces con razonable seguridad"),
     aviso: texto("Qué no se lee bien o qué conviene revisar, en una frase; vacío si todo está claro"),
   },
-  required: ["es_vino", "nombre", "bodega", "tipo", "anada", "denominacion", "pais", "uvas", "estado", "ventana", "cata", "aviso"],
+  required: ["es_vino", "nombre", "bodega", "tipo", "anada", "denominacion", "pais", "uvas", "ventana_desde", "ventana_hasta", "cata", "puntuacion_etiqueta", "puntuacion_estimada", "aviso"],
   additionalProperties: false,
 };
 
@@ -66,8 +64,26 @@ Te llega la foto de la etiqueta (o de la botella) de un vino. Devuelve sus datos
 Lo que se lee en la etiqueta es lo importante: cópialo con fidelidad. Para lo que no se lee
 (uvas, país, tipo) puedes usar lo que sepas de ese vino si estás razonablemente seguro;
 si no, déjalo vacío. No inventes la añada: si no se ve, vacía.
-La cata, la ventana y el estado son sugerencias orientativas: dalas solo si conoces el vino
-o su estilo, teniendo en cuenta la añada y que hoy es ${new Date().getFullYear()}.`;
+La cata y la ventana de consumo son sugerencias orientativas: dalas solo si conoces el vino
+o su estilo, teniendo en cuenta la añada y que hoy es ${new Date().getFullYear()}.
+Las puntuaciones que no se leen en la foto pueden ser erróneas: da solo las que recuerdes con
+razonable seguridad para esa añada.`;
+
+// Cuándo beber según la ventana (la misma regla que ventana.js en la app):
+// urg si ya terminó, ya si termina este año o el siguiente, guardar si aún
+// no ha empezado y punto en el resto.
+function estadoSegunFechas(desde: number | null, hasta: number | null): string {
+  const ano = new Date().getFullYear();
+  if (hasta != null && hasta < ano) return "urg";
+  if (hasta != null && hasta <= ano + 1) return "ya";
+  if (desde != null && desde > ano) return "guardar";
+  return "punto";
+}
+
+const ano = (s: string) => {
+  const n = parseInt(s, 10);
+  return n >= 1800 && n <= 2100 ? n : null;
+};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -118,9 +134,24 @@ Deno.serve(async (req) => {
     const datos = JSON.parse(bloque.text);
     if (!datos.es_vino) return respuesta({ error: "No parece la etiqueta de un vino. Prueba con otra foto." }, 422);
 
-    const anada = parseInt(datos.anada, 10);
-    const { es_vino: _, aviso, ...vino } = datos;
-    return respuesta({ vino: { ...vino, anada: anada >= 1800 && anada <= 2100 ? anada : null }, aviso });
+    const { es_vino: _, aviso, ventana_desde, ventana_hasta, puntuacion_etiqueta, puntuacion_estimada, ...vino } = datos;
+    let desde = ano(ventana_desde);
+    const hasta = ano(ventana_hasta);
+    if (desde && hasta && desde > hasta) desde = null;
+    const ventana = desde && hasta ? (desde === hasta ? `${desde}` : `${desde}–${hasta}`)
+      : hasta ? `hasta ${hasta}` : desde ? `desde ${desde}` : "";
+    const puntuacion = puntuacion_etiqueta
+      || (puntuacion_estimada ? `≈ ${puntuacion_estimada} (aprox., según Claude)` : "");
+    return respuesta({
+      vino: {
+        ...vino,
+        anada: ano(datos.anada),
+        ventana,
+        estado: desde || hasta ? estadoSegunFechas(desde, hasta) : "",
+        puntuacion,
+      },
+      aviso,
+    });
   } catch (e) {
     console.error(e);
     if (e instanceof Anthropic.AuthenticationError) return respuesta({ error: "La clave ANTHROPIC_API_KEY no es válida" }, 500);

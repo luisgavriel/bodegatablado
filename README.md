@@ -62,7 +62,8 @@ originales* deshace todas las igualadas.
 
 En *Añadir vino*, *Rellenar con una foto de la etiqueta* manda la foto (reducida a 1200 px) a la función
 `supabase/functions/reconocer-vino`, que se la pasa a Claude Opus 5.5 con visión. Claude devuelve nombre,
-bodega, tipo, añada, denominación, país y uvas, y sugiere cuándo beberlo, la ventana y una nota de cata. La
+bodega, tipo, añada, denominación, país y uvas, y sugiere la ventana de consumo, una nota de cata y la
+puntuación (la de la etiqueta si se ve; si no, la que recuerde marcada como «≈ … (aprox., según Claude)»). La
 app rellena el formulario, marca los campos sugeridos y no guarda nada hasta que pulsas *Guardar*.
 Cuesta alrededor de 1 céntimo por foto.
 
@@ -71,6 +72,12 @@ Cuesta alrededor de 1 céntimo por foto.
 3. *Edge Functions → Secrets*: añade `ANTHROPIC_API_KEY` con tu clave.
 
 Si Opus rechaza una foto, la API la repite sola con otro modelo de Claude (`fallbacks: "default"`).
+
+## Cuándo beber
+
+*Cuándo beber* se calcula a partir de la ventana (`ventana.js`): **Urgente** si ya terminó, **Beber ya** si
+termina este año o el siguiente, **Guardar** si aún no ha empezado y **En su punto** en el resto. Se aplica al
+escribir la ventana en la ficha, al guardar un vino nuevo y en lo que propone Claude desde la etiqueta.
 
 ## Compartir la bodega
 

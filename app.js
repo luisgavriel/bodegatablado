@@ -1,5 +1,6 @@
 import { crearStore, vinosIniciales } from "./store.js";
 import { normalizar, estaNormalizada } from "./normalizar.js";
+import { estadoSegunVentana } from "./ventana.js";
 
 const TIPOS = [
   ["tinto", "Tintos"], ["blanco", "Blancos"], ["espumoso", "Espumosos"],
@@ -399,6 +400,7 @@ async function guardar(e) {
       const v = await store.actualizar(editando.id, datos);
       vinos = vinos.map((x) => (x.id === v.id ? v : x));
     } else {
+      datos.estado = estadoSegunVentana(datos.ventana) ?? datos.estado;
       const nuevo = await store.crear(datos);
       vinos.push(nuevo);
       if (store.fotos) fotoAutomatica(nuevo.id).then((e) => e && toast("Sin foto: " + e));
@@ -608,7 +610,13 @@ function enlazar() {
     if (e.target.files[0]) leerEtiqueta(e.target.files[0]);
     e.target.value = "";
   });
-  $("#form-vino").addEventListener("input", (e) => e.target.classList.remove("sugerido"));
+  $("#form-vino").addEventListener("input", (e) => {
+    e.target.classList.remove("sugerido");
+    // Cuándo beber se ajusta solo a las fechas de la ventana.
+    if (e.target.name !== "ventana") return;
+    const estado = estadoSegunVentana(e.target.value);
+    if (estado) e.target.form.elements.estado.value = estado;
+  });
   $("#btn-importar").addEventListener("click", () => $("#file-importar").click());
   $("#file-importar").addEventListener("change", (e) => {
     if (e.target.files[0]) importar(e.target.files[0]);
