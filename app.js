@@ -19,6 +19,7 @@ let filtro = "todo";
 let busqueda = "";
 let orden = "tipo";
 let editando = null;
+let estadoPrevio = "";
 let fichaId = null;
 const buscandoNotas = new Set();
 // Lista o galería. Se recuerda en este navegador; sin preferencia, galería
@@ -26,6 +27,11 @@ const buscandoNotas = new Set();
 let vista = (() => {
   try { const v = localStorage.getItem("bodega-vista"); if (v === "lista" || v === "galeria") return v; } catch {}
   return window.matchMedia("(min-width: 900px)").matches ? "galeria" : "lista";
+})();
+// Resumen plegado o abierto en el móvil. Se recuerda en este navegador;
+// sin preferencia, empieza plegado.
+let resumenAbierto = (() => {
+  try { return localStorage.getItem("bodega-resumen") === "abierto"; } catch { return false; }
 })();
 let acceso = { rol: "dueno" };
 const soloVer = () => acceso.rol === "lector";
@@ -72,7 +78,21 @@ function pasaBusqueda(v) {
   return busqueda.split(/\s+/).every((p) => texto.includes(p));
 }
 
+// Clave para ordenar por puntuación: primero los vinos con nota de guías
+// (de mayor a menor), luego los que solo tienen Vivino y al final los que
+// no tienen ninguna.
+function clavePuntuacion(v) {
+  const { guias, vivino } = leerPuntuacion(v.puntuacion);
+  if (guias.length) return [0, -guias[0].valor];
+  if (vivino) return [1, -vivino.nota];
+  return [2, 0];
+}
+
 function comparar(a, b) {
+  if (orden === "puntuacion") {
+    const [ga, na] = clavePuntuacion(a), [gb, nb] = clavePuntuacion(b);
+    return ga - gb || na - nb || a.nombre.localeCompare(b.nombre);
+  }
   if (orden === "urgencia") return (URGENCIA[a.estado] ?? 9) - (URGENCIA[b.estado] ?? 9) || a.nombre.localeCompare(b.nombre);
   if (orden === "anada") return (a.anada ?? 9999) - (b.anada ?? 9999) || a.nombre.localeCompare(b.nombre);
   if (orden === "nombre") return a.nombre.localeCompare(b.nombre);
@@ -132,6 +152,20 @@ function puntuacionHtml(texto) {
   ].join("");
 }
 
+// La mejor nota del vino (la de la guía más alta o, si no hay, la de
+// Vivino). Solo se ve en la lista compacta del móvil.
+function mejorNotaHtml(texto) {
+  const { guias, vivino } = leerPuntuacion(texto);
+  const [g] = guias;
+  if (g) return `<span class="sello mejor" title="${esc(guias.map((x) => x.texto).join(" · "))}"><b>${esc(g.nota)}</b><span>${esc(g.guia)}</span></span>`;
+  if (vivino) return `<span class="sello mejor" title="${esc(vivino.texto)}"><b>${vivino.cifra}</b><span>Vivino</span></span>`;
+  return "";
+}
+
+// «DOCa Rioja (Haro)» → «Rioja», para la lista compacta.
+const denominacionCorta = (d) => String(d ?? "").replace(/\s*\(.*?\)\s*/g, " ")
+  .replace(/^(DOCa|DOQ|DOCG|DOC|DOP|DO|AOC|AOP|IGP|VT|VdT|Vino de la Tierra( de)?)\s+/i, "").trim();
+
 // Marcador de la galería: dos casillas fijas, la mejor nota de las guías
 // (con «+N» si hay más; todas están en la ficha) y la de Vivino, con un
 // guion si falta. Así todas las tarjetas miden igual.
@@ -179,17 +213,20 @@ function lineaHtml(v) {
 
 function filaVino(v) {
   const meta = [v.bodega, v.denominacion, v.pais].filter(Boolean).join(" · ");
-  const ventana = v.estado ? `${ESTADOS[v.estado]}${v.ventana ? " · " + v.ventana : ""}` : v.ventana;
-  const puntos = puntuacionHtml(v.puntuacion);
+  const metaCorta = [v.bodega, denominacionCorta(v.denominacion)].filter(Boolean).join(" · ");
+  // En la lista compacta del móvil solo se ve el estado, sin la ventana.
+  const ventana = v.estado ? `${ESTADOS[v.estado]}${v.ventana ? `<span class="w-vent"> · ${esc(v.ventana)}</span>` : ""}` : esc(v.ventana ?? "");
+  const puntos = puntuacionHtml(v.puntuacion) + mejorNotaHtml(v.puntuacion);
   return `
     <li class="wine${v.botellas === 0 ? " agotado" : ""}" data-id="${v.id}">
       <div class="foto ${esc(v.tipo)}" data-ficha>${imagen(v)}<span class="qty" aria-hidden="true">×${v.botellas}</span></div>
       <div class="main" data-ficha>
         <p class="name">${esc(v.nombre)}<span class="anada">${v.anada ?? "s/a"}</span></p>
-        ${meta ? `<p class="meta">${esc(meta)}</p>` : ""}
+        ${meta ? `<p class="meta larga">${esc(meta)}</p>` : ""}
+        ${metaCorta ? `<p class="meta corta">${esc(metaCorta)}</p>` : ""}
         ${v.uvas ? `<p class="meta uvas">${esc(v.uvas)}</p>` : ""}
         ${ventana || puntos ? `<p class="eval">
-          ${ventana ? `<span class="win ${esc(v.estado ?? "")}">${esc(ventana)}</span>` : ""}
+          ${ventana ? `<span class="win ${esc(v.estado ?? "")}">${ventana}</span>` : ""}
           ${puntos}
         </p>` : ""}
         ${v.botellas > 0 ? lineaHtml(v) : ""}
@@ -287,15 +324,23 @@ function render() {
   const porTipo = TIPOS.map(([t, nombre]) => [t, nombre, botellas(vinos.filter((v) => v.tipo === t))]).filter(([, , n]) => n);
   const pronto = enStock.filter((v) => v.estado === "ya" || v.estado === "urg").length;
   const total = botellas(vinos);
+  const resumenBotellas = `${total === 1 ? "botella" : "botellas"} · ${enStock.length} ${enStock.length === 1 ? "vino" : "vinos"}`;
+  $("#resumen").classList.toggle("abierto", resumenAbierto);
   $("#resumen").innerHTML = vinos.length ? `
-    <p class="total">${total}<small>${total === 1 ? "botella" : "botellas"} · ${enStock.length} ${enStock.length === 1 ? "vino" : "vinos"}</small></p>
+    <button type="button" class="plegar" aria-expanded="${resumenAbierto}" aria-label="${resumenAbierto ? "Plegar" : "Desplegar"} el resumen">
+      <span class="total">${total}<small>${resumenBotellas}</small></span>
+      <span class="mini" aria-hidden="true">${porTipo.map(([t, , n]) => `<span><span class="dot ${t}"></span>${n}</span>`).join("")}</span>
+      <svg class="flecha" aria-hidden="true"><use href="#i-flecha"/></svg>
+    </button>
+    <p class="total">${total}<small>${resumenBotellas}</small></p>
     ${total ? `<div class="compo" role="img" aria-label="${porTipo.map(([t, nombre, n]) => `${n} ${n === 1 ? t : nombre.toLowerCase()}`).join(", ")}">
       ${porTipo.map(([t, nombre, n]) => `<span class="${t}${filtro === t ? " activo" : ""}" style="flex:${n}" data-tipo="${t}" title="Ver ${nombre.toLowerCase()}"></span>`).join("")}</div>` : ""}
     <ul class="tally${porTipo.some(([t]) => t === filtro) ? " filtrado" : ""}">${porTipo.map(([t, nombre, n]) =>
       `<li><button type="button" class="${t}" data-tipo="${t}" aria-pressed="${filtro === t}" aria-label="Ver ${nombre.toLowerCase()}"><b>${n}</b><span><span class="dot ${t}"></span>${n === 1 ? t : nombre.toLowerCase()}</span></button></li>`).join("")}</ul>
     ${pronto ? `<button class="alerta" type="button" id="btn-pronto">
       <svg aria-hidden="true"><use href="#i-reloj"/></svg>
-      <span>${pronto === 1 ? "1 vino conviene beberlo" : `${pronto} vinos conviene beberlos`} antes de que acabe ${new Date().getFullYear() + 1}</span>
+      <span class="largo">${pronto === 1 ? "1 vino conviene beberlo" : `${pronto} vinos conviene beberlos`} antes de que acabe ${new Date().getFullYear() + 1}</span>
+      <span class="corto">${pronto} para beber pronto</span>
       <span class="ir">Ver</span></button>` : ""}` : "";
 
   for (const c of document.querySelectorAll("#filtros .chip")) {
@@ -322,10 +367,36 @@ function render() {
     const ordenados = [...visibles].sort(comparar);
     html = ordenados.length ? `<section class="grupo"><ol class="ledger">${ordenados.map(filaVino).join("")}</ol></section>` : "";
   }
-  $("#lista").innerHTML = html || (vinos.length ? `<p class="meta">Ningún vino coincide.</p>` : "");
+  $("#lista").innerHTML = html || (vinos.length ? sinResultadosHtml() : "");
   $("#lista").classList.toggle("galeria", vista === "galeria");
   for (const b of document.querySelectorAll(".vista")) b.setAttribute("aria-pressed", String(b.dataset.vista === vista));
   if ($("#ficha").open) pintarFicha();
+}
+
+// Aviso cuando ningún vino pasa el filtro y la búsqueda, con lo que se
+// buscó y un botón para volver a toda la bodega.
+const SIN_FILTRO = {
+  tinto: "Ningún tinto", blanco: "Ningún blanco", espumoso: "Ningún espumoso", rosado: "Ningún rosado",
+  ya: "Ningún vino para beber ya", guardar: "Ningún vino para guardar", agotados: "Ningún vino agotado",
+};
+function sinResultadosHtml() {
+  const texto = $("#buscar").value.trim();
+  const base = SIN_FILTRO[filtro] ?? "Ningún vino";
+  const titulo = texto ? `${base} con «${esc(texto)}»` : base;
+  const consejo = texto && filtro !== "todo" ? "Prueba con otra palabra o busca en toda la bodega."
+    : texto ? "Prueba con otra palabra: el nombre, la bodega, la uva o el país." : "Elige otro filtro para ver el resto.";
+  return `<div class="sin-resultados">
+    <span class="ico" aria-hidden="true"><svg><use href="#i-buscar"/></svg></span>
+    <h3>${titulo}</h3>
+    <p>${consejo}</p>
+    <button class="btn primary" type="button" data-quitar-filtros>Quitar filtros</button>
+  </div>`;
+}
+
+function quitarFiltros() {
+  $("#buscar").value = "";
+  busqueda = "";
+  elegirFiltro("todo");
 }
 
 // ---- Fotos ----
@@ -523,13 +594,36 @@ async function fotosQueFaltan() {
 }
 
 // ---- Edición ----
+// Nombres de los campos del formulario (los botones de tipo y de cuándo
+// beber son grupos de radios con un solo nombre).
+const nombresCampos = (f) => [...new Set([...f.elements].map((el) => el.name).filter(Boolean))];
+
+// Cuando un campo es un grupo de botones, el resaltado va en el grupo.
+const cajaCampo = (el) => el.closest("[data-campo]") ?? el;
+
+// Texto breve de cada sección del formulario, para verlo con ella plegada.
+function resumirSecciones() {
+  const f = $("#form-vino");
+  const val = (n) => f.elements[n].value.trim();
+  const textos = [
+    [val("bodega"), val("denominacion"), val("pais")],
+    [ESTADOS[val("estado")], val("ventana")],
+    [val("uvas"), val("puntuacion")],
+    [val("cata"), val("notas")],
+  ];
+  f.querySelectorAll(".resumen-sec").forEach((el, i) => { el.textContent = textos[i].filter(Boolean).join(" · "); });
+}
+
 function abrirDialogo(vino) {
   editando = vino;
   const f = $("#form-vino");
   f.reset();
   $("#dlg-titulo").textContent = vino ? "Editar vino" : "Nuevo vino";
   $("#btn-borrar").hidden = !vino;
-  if (vino) for (const el of f.elements) if (el.name) el.value = vino[el.name] ?? "";
+  if (vino) for (const n of nombresCampos(f)) f.elements[n].value = vino[n] ?? "";
+  estadoPrevio = f.elements.estado.value;
+  for (const d of f.querySelectorAll("details[data-plegable]")) d.open = false;
+  resumirSecciones();
   $("#fotos-bloque").hidden = !vino || !store.fotos || soloVer();
   $("#etiqueta-bloque").hidden = !!vino || !store.etiqueta || soloVer();
   $("#etiqueta-estado").textContent = "";
@@ -571,8 +665,14 @@ async function leerEtiqueta(file) {
       const el = f.elements[k];
       if (!el || valor === null || valor === "") continue;
       el.value = valor;
-      el.classList.add("sugerido");
+      const caja = cajaCampo(el instanceof RadioNodeList ? el[0] : el);
+      caja.classList.add("sugerido");
+      // Abre las secciones con datos nuevos para que se puedan revisar.
+      const seccion = caja.closest("details");
+      if (seccion) seccion.open = true;
     }
+    estadoPrevio = f.elements.estado.value;
+    resumirSecciones();
     estado.textContent = "Revisa los datos antes de guardar. La cata, la ventana y cuándo beber son sugerencias de Claude. Al guardar, la app busca sus puntuaciones en la web."
       + (aviso ? " Ojo: " + aviso : "");
   } catch (err) {
@@ -585,6 +685,8 @@ async function leerEtiqueta(file) {
 function leerFormulario() {
   const datos = Object.fromEntries(new FormData($("#form-vino")));
   for (const k in datos) datos[k] = datos[k].trim() || null;
+  // Sin ningún botón de cuándo beber marcado, el estado queda vacío.
+  datos.estado ??= null;
   datos.anada = datos.anada ? parseInt(datos.anada, 10) : null;
   datos.botellas = Math.max(0, parseInt(datos.botellas ?? "0", 10) || 0);
   return datos;
@@ -753,6 +855,8 @@ async function mostrar(usuario) {
   $("#btn-recuperar").hidden = !store.fotos || soloVer();
   $("#btn-importar").hidden = soloVer();
   $("#btn-cargar-iniciales").hidden = ajena;
+  // Cada sección del menú ⋯ se oculta si no le queda ninguna opción.
+  for (const sec of document.querySelectorAll(".menu-sec")) sec.hidden = ![...sec.querySelectorAll("button")].some((b) => !b.hidden);
   try {
     vinos = await store.listar();
   } catch (err) {
@@ -774,6 +878,11 @@ function enlazar() {
   // El aviso y cada tipo del resumen (casilla o tramo de la barra) llevan
   // a la lista filtrada. Volver a tocar el tipo elegido quita el filtro.
   $("#resumen").addEventListener("click", (e) => {
+    if (e.target.closest(".plegar")) {
+      resumenAbierto = !resumenAbierto;
+      try { localStorage.setItem("bodega-resumen", resumenAbierto ? "abierto" : "plegado"); } catch {}
+      return render();
+    }
     const tipo = e.target.closest("[data-tipo]")?.dataset.tipo;
     if (tipo) elegirFiltro(filtro === tipo ? "todo" : tipo);
     else if (e.target.closest("#btn-pronto")) elegirFiltro("ya");
@@ -797,6 +906,7 @@ function enlazar() {
   $("#orden").addEventListener("change", (e) => { orden = e.target.value; render(); });
 
   $("#lista").addEventListener("click", (e) => {
+    if (e.target.closest("[data-quitar-filtros]")) return quitarFiltros();
     const fila = e.target.closest(".wine");
     if (!fila) return;
     const paso = e.target.closest(".step");
@@ -877,11 +987,28 @@ function enlazar() {
     e.target.value = "";
   });
   $("#form-vino").addEventListener("input", (e) => {
-    e.target.classList.remove("sugerido");
+    cajaCampo(e.target).classList.remove("sugerido");
     // Cuándo beber se ajusta solo a las fechas de la ventana.
-    if (e.target.name !== "ventana") return;
-    const estado = estadoSegunVentana(e.target.value);
-    if (estado) e.target.form.elements.estado.value = estado;
+    if (e.target.name === "ventana") {
+      const estado = estadoSegunVentana(e.target.value);
+      if (estado) estadoPrevio = e.target.form.elements.estado.value = estado;
+    }
+    resumirSecciones();
+  });
+  $("#form-vino").addEventListener("click", (e) => {
+    // Contador de botellas.
+    const paso = e.target.closest("[data-paso]");
+    if (paso) {
+      const el = e.target.form?.elements.botellas ?? $("#f-botellas");
+      el.value = Math.max(0, (parseInt(el.value, 10) || 0) + Number(paso.dataset.paso));
+      return;
+    }
+    // Volver a tocar el estado marcado lo desmarca (queda «sin indicar»).
+    const radio = e.target.closest('input[name="estado"]');
+    if (!radio) return;
+    if (radio.value === estadoPrevio) radio.checked = false;
+    estadoPrevio = radio.form.elements.estado.value;
+    resumirSecciones();
   });
   $("#btn-importar").addEventListener("click", () => $("#file-importar").click());
   $("#file-importar").addEventListener("change", (e) => {
