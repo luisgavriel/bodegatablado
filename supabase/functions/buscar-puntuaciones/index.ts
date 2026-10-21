@@ -55,9 +55,9 @@ Reglas:
 - Copia la nota tal como la da la fuente: "92", "91+", "89–91" (en barrica), "16,5/20", "2★".
 - "fuente" es el nombre corto: Parker, Peñín, Suckling, Wine Spectator, Decanter, Vinous, Falstaff,
   Wine Enthusiast, Jancis Robinson, Tim Atkin, Hachette…
-- De Vivino basta con el número de la ficha del vino (vivino.com/.../w/<id>): la nota la consulta la app.
-  Si además ves la nota, da la media sobre 5 con un decimal ("4,1") y su añada (null si es la media de
-  todas las añadas).
+- De Vivino da el número de la ficha del vino (vivino.com/.../w/<id>): la nota de la añada la consulta la
+  app. Abre además la ficha sin ?year y da la media del vino sobre 5 con un decimal ("3,8") con anada
+  null: arriba aparece pegada al número de valoraciones, p. ej. «3.8163 ratings» es 3,8 con 163.
 - "url" es la página donde has visto la nota.
 - No inventes nada: si no encuentras notas, devuelve las listas vacías.
 
@@ -81,20 +81,19 @@ const nombreFuente = (entrada: string) => entrada.replace(/\s+[\d(≈].*$/u, "")
 // se quitan los «Sin puntuación…» y las estimaciones «≈ …».
 type NotaVivino = { fuente: string; nota: string; sufijo: string; url: string };
 
-// Nota de Vivino desde su API: la de la añada si tiene bastantes valoraciones;
-// si no, la media del vino. Si la añada no existe, la API devuelve otra, así
-// que se comprueba vintage.year.
+// Nota de la añada desde la API de Vivino (reviews[0].vintage.statistics), si
+// tiene bastantes valoraciones. Si la añada no existe, la API devuelve otra,
+// así que se comprueba vintage.year; sin reseñas, reviews viene vacío. La API
+// no da la media del vino: esa la lee Claude en la ficha.
 async function notaVivino(id: number, anada: number | null): Promise<NotaVivino | null> {
   const api = `https://www.vivino.com/api/wines/${id}/reviews?per_page=1${anada ? `&year=${anada}` : ""}`;
   const res = await fetch(api, { headers: { "User-Agent": "Mozilla/5.0 (bodega-tablado)", "Accept": "application/json" } });
   if (!res.ok) return null;
-  const vt = (await res.json())?.vintage;
+  const vt = (await res.json())?.reviews?.[0]?.vintage;
   const url = `https://www.vivino.com/w/${id}${anada ? `?year=${anada}` : ""}`;
   const cifra = (n: number) => n.toFixed(1).replace(".", ",");
   const deAnada = vt?.statistics?.status !== "BelowThreshold" ? Number(vt?.statistics?.ratings_average) : 0;
-  if (deAnada > 0 && (!anada || Number(vt?.year) === anada)) return { fuente: "Vivino", nota: cifra(deAnada), sufijo: "", url };
-  const media = Number(vt?.wine?.statistics?.ratings_average);
-  if (media > 0) return { fuente: "Vivino", nota: cifra(media), sufijo: anada ? " (media de añadas)" : "", url };
+  if (deAnada > 0 && anada && Number(vt?.year) === anada) return { fuente: "Vivino", nota: cifra(deAnada), sufijo: "", url };
   return null;
 }
 
@@ -176,8 +175,8 @@ Deno.serve(async (req) => {
       g && typeof g.fuente === "string" && g.fuente.trim() && typeof g.nota === "string" && g.nota.trim()
       && urlValida(g.url) && (vino.anada == null || g.anada === vino.anada))
       .map((g) => ({ ...g, fuente: g.fuente.trim(), nota: g.nota.trim() }));
-    // Vivino: primero su API con el id que ha encontrado Claude; si falla, la
-    // nota que Claude haya visto en la página.
+    // Vivino: la nota de la añada desde su API con el id que ha encontrado
+    // Claude; si no la hay, la media del vino que Claude ha leído en la ficha.
     let vivino: NotaVivino | null = null;
     const id = Number(datos.vivino_id);
     if (Number.isInteger(id) && id > 0) vivino = await notaVivino(id, vino.anada).catch(() => null);
