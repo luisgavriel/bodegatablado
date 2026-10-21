@@ -130,14 +130,25 @@ textarea { resize: vertical; }
 .ledger { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--ink); }
 .wine {
   display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   gap: 4px 12px;
   align-items: start;
   padding: 14px 0;
   border-bottom: 1px solid var(--rule);
 }
 .wine.agotado { opacity: .55; }
-.wine .dot { margin-top: 9px; }
+.foto { width: 44px; height: 110px; display: grid; place-items: center; }
+.foto img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.botella { width: 40px; height: 110px; --c: var(--muted); }
+.botella.tinto { --c: var(--tinto); }
+.botella.blanco { --c: var(--blanco); }
+.botella.rosado { --c: var(--rosado); }
+.botella.espumoso { --c: var(--blanco); }
+.botella .vidrio { fill: var(--c); }
+.botella .capsula { fill: var(--ink); opacity: .75; }
+.botella.espumoso .capsula { fill: var(--blanco); opacity: 1; filter: brightness(1.25); }
+.botella .etiqueta { fill: var(--paper); }
+.botella text { font: 600 10px var(--font-ui); fill: var(--ink); }
 .main { min-width: 0; display: grid; gap: 2px; cursor: pointer; }
 .name { margin: 0; font: 500 19px/1.25 var(--font-display); }
 .name .anada { font: 500 15px var(--font-num); color: var(--muted); margin-left: 6px; }
@@ -169,6 +180,16 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .grid label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
 .grid .full { grid-column: 1 / -1; }
+.fotos-bloque { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px 16px; align-items: center; }
+.foto-grande { width: 64px; height: 160px; display: grid; place-items: center; }
+.foto-grande img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.foto-grande .botella { width: 58px; height: 160px; }
+.fotos-acciones { display: grid; gap: 6px; justify-items: start; }
+.candidatas { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.candidatas:empty { display: none; }
+.candidata { padding: 4px; height: 120px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; cursor: pointer; display: grid; place-items: center; }
+.candidata img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.candidata:hover, .candidata:focus-visible { border-color: var(--accent); outline: 2px solid var(--accent); }
 .dlg-acciones { display: flex; gap: 8px; align-items: center; }
 .dlg-acciones .sp { flex: 1; }
 
@@ -178,6 +199,9 @@ dialog::backdrop { background: rgb(0 0 0 / .45); }
 }
 
 @media (max-width: 520px) {
+  .wine { grid-template-columns: 34px minmax(0, 1fr) auto; }
+  .foto { width: 34px; height: 86px; }
+  .botella { width: 31px; height: 86px; }
   .grid { grid-template-columns: 1fr; }
   .name { font-size: 18px; }
   .btn.primary#btn-nuevo { padding: 10px 14px; }

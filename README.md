@@ -32,6 +32,20 @@ Sin build ni dependencias: HTML, CSS y JavaScript que se sirven tal cual (por ej
 5. Abre la app, entra con tu correo y pulsa *Cargar mis 37 vinos del artefacto*.
    Después ajusta el número de botellas de cada uno (todos empiezan en 1).
 
+## Fotos automáticas
+
+La función `supabase/functions/buscar-imagen` busca fotos de cada vino con
+[Brave Image Search](https://brave.com/search/api/) (5 $ de crédito gratis al mes, unas 1.000 búsquedas)
+y guarda la elegida en la carpeta pública `fotos` de Supabase Storage.
+
+1. Crea una clave en https://api-dashboard.search.brave.com (plan *Search*, gratis con verificación por tarjeta).
+2. En Supabase, *SQL Editor*: pega `supabase/fotos.sql` y pulsa *Run*.
+3. *Edge Functions → Deploy a new function → Via Editor*: nombre `buscar-imagen`, pega `index.ts` y despliega.
+4. *Edge Functions → Secrets*: añade `BRAVE_API_KEY` con tu clave.
+
+En la app: al añadir un vino se busca su foto sola; en la ficha de cada vino, *Buscar otra foto*;
+y en el menú ⋯, *Buscar las fotos que faltan*. Sin foto se muestra una botella dibujada.
+
 ## Probar en local
 
 ```sh

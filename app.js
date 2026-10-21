@@ -54,12 +54,27 @@ function comparar(a, b) {
   return 0;
 }
 
+// Botella dibujada con el color del tipo y las iniciales del vino. Se usa
+// mientras el vino no tenga foto.
+function botella(v) {
+  const iniciales = v.nombre.replace(/[«»"'.]/g, "").split(/\s+/)
+    .filter((p) => /^[\p{Lu}\d]/u.test(p)).slice(0, 2).map((p) => p[0]).join("") || v.nombre[0];
+  return `<svg class="botella ${esc(v.tipo)}" viewBox="0 0 40 110" aria-hidden="true">
+    <path class="vidrio" d="M16 2h8v26c0 6 10 10 10 22v54a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4V50c0-12 10-16 10-22z"/>
+    <rect class="capsula" x="15" y="2" width="10" height="16" rx="1.5"/>
+    <rect class="etiqueta" x="9" y="60" width="22" height="28" rx="2"/>
+    <text x="20" y="78" text-anchor="middle">${esc(iniciales.toUpperCase())}</text>
+  </svg>`;
+}
+
 function filaVino(v) {
   const meta = [v.bodega, v.denominacion, v.pais].filter(Boolean).join(" · ");
   const ventana = v.estado ? `${ESTADOS[v.estado]}${v.ventana ? " · " + v.ventana : ""}` : v.ventana;
   return `
     <li class="wine${v.botellas === 0 ? " agotado" : ""}" data-id="${v.id}">
-      <span class="dot ${esc(v.tipo)}"></span>
+      <div class="foto">${v.imagen_url
+        ? `<img src="${esc(v.imagen_url)}" alt="" loading="lazy">`
+        : botella(v)}</div>
       <div class="main" data-editar>
         <p class="name">${esc(v.nombre)}<span class="anada">${v.anada ?? "s/a"}</span></p>
         ${meta ? `<p class="meta">${esc(meta)}</p>` : ""}
@@ -112,6 +127,70 @@ function render() {
   $("#lista").innerHTML = html || (vinos.length ? `<p class="meta">Ningún vino coincide.</p>` : "");
 }
 
+// ---- Fotos ----
+function pintarFotoActual(v) {
+  $("#foto-actual").innerHTML = v.imagen_url ? `<img src="${esc(v.imagen_url)}" alt="">` : botella(v);
+}
+
+function ponerFoto(id, imagen_url) {
+  const v = vinos.find((x) => x.id === id);
+  if (v) v.imagen_url = imagen_url;
+  return v;
+}
+
+async function buscarFotos() {
+  const vino = editando;
+  const estado = $("#fotos-estado");
+  estado.textContent = "Buscando…";
+  $("#candidatas").innerHTML = "";
+  try {
+    const candidatas = await store.fotos.buscar(vino.id);
+    estado.textContent = candidatas.length ? "Elige una:" : "No he encontrado fotos.";
+    $("#candidatas").innerHTML = candidatas.map((c, i) =>
+      `<button class="candidata" type="button" data-i="${i}" title="${esc(c.titulo)}">
+        <img src="${esc(c.miniatura)}" alt="${esc(c.titulo)}" loading="lazy" referrerpolicy="no-referrer">
+      </button>`).join("");
+    $("#candidatas").onclick = async (e) => {
+      const b = e.target.closest(".candidata");
+      if (!b) return;
+      const c = candidatas[Number(b.dataset.i)];
+      estado.textContent = "Guardando…";
+      try {
+        // Si la original no se deja descargar, guardamos la miniatura.
+        const url = await store.fotos.guardar(vino.id, c.url).catch(() => store.fotos.guardar(vino.id, c.miniatura));
+        pintarFotoActual(ponerFoto(vino.id, url));
+        $("#candidatas").innerHTML = "";
+        estado.textContent = "Foto guardada.";
+        render();
+      } catch (err) { estado.textContent = "No se pudo guardar: " + err.message; }
+    };
+  } catch (err) {
+    estado.textContent = "No se pudo buscar: " + err.message;
+  }
+}
+
+async function fotoAutomatica(id) {
+  try {
+    ponerFoto(id, await store.fotos.auto(id));
+    render();
+    return true;
+  } catch (err) {
+    console.warn("Sin foto para", id, err);
+    return false;
+  }
+}
+
+async function fotosQueFaltan() {
+  const pendientes = vinos.filter((v) => !v.imagen_url);
+  if (!pendientes.length) return toast("Todos los vinos tienen foto");
+  let hechas = 0;
+  for (const [i, v] of pendientes.entries()) {
+    toast(`Buscando fotos… ${i + 1} de ${pendientes.length}`);
+    if (await fotoAutomatica(v.id)) hechas++;
+  }
+  toast(`${hechas} fotos nuevas` + (hechas < pendientes.length ? `, ${pendientes.length - hechas} sin encontrar` : ""));
+}
+
 // ---- Edición ----
 function abrirDialogo(vino) {
   editando = vino;
@@ -120,6 +199,10 @@ function abrirDialogo(vino) {
   $("#dlg-titulo").textContent = vino ? "Editar vino" : "Nuevo vino";
   $("#btn-borrar").hidden = !vino;
   if (vino) for (const el of f.elements) if (el.name) el.value = vino[el.name] ?? "";
+  $("#fotos-bloque").hidden = !vino || !store.fotos;
+  $("#candidatas").innerHTML = "";
+  $("#fotos-estado").textContent = "";
+  if (vino) pintarFotoActual(vino);
   $("#dlg").showModal();
 }
 
@@ -139,7 +222,9 @@ async function guardar(e) {
       const v = await store.actualizar(editando.id, datos);
       vinos = vinos.map((x) => (x.id === v.id ? v : x));
     } else {
-      vinos.push(await store.crear(datos));
+      const nuevo = await store.crear(datos);
+      vinos.push(nuevo);
+      if (store.fotos) fotoAutomatica(nuevo.id);
     }
     $("#dlg").close();
     render();
@@ -212,6 +297,7 @@ async function mostrar(usuario) {
   $("#btn-nuevo").hidden = !dentro;
   $("#btn-menu").hidden = !dentro;
   $("#btn-salir").hidden = store.modo === "local";
+  $("#btn-fotos-todas").hidden = !store.fotos;
   if (!dentro) return;
   try {
     vinos = await store.listar();
@@ -258,6 +344,8 @@ function enlazar() {
   });
   document.addEventListener("click", () => { menu.hidden = true; });
   $("#btn-exportar").addEventListener("click", exportar);
+  $("#btn-fotos-todas").addEventListener("click", fotosQueFaltan);
+  $("#btn-buscar-fotos").addEventListener("click", buscarFotos);
   $("#btn-importar").addEventListener("click", () => $("#file-importar").click());
   $("#file-importar").addEventListener("change", (e) => {
     if (e.target.files[0]) importar(e.target.files[0]);

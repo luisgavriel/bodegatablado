@@ -4,7 +4,7 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
 
 const CAMPOS = ["nombre", "bodega", "denominacion", "pais", "tipo", "uvas", "anada",
-  "botellas", "estado", "ventana", "puntuacion", "cata", "notas"];
+  "botellas", "estado", "ventana", "puntuacion", "cata", "notas", "imagen_url"];
 
 function limpiar(vino) {
   const out = {};
@@ -48,6 +48,20 @@ async function crearStoreSupabase() {
       return check(await sb.from("vinos").update(limpiar(cambios)).eq("id", id).select().single());
     },
     async borrar(id) { check(await sb.from("vinos").delete().eq("id", id)); },
+    fotos: {
+      async llamar(body) {
+        const { data, error } = await sb.functions.invoke("buscar-imagen", { body });
+        if (error) {
+          let msg = error.message;
+          try { msg = (await error.context.json()).error || msg; } catch { /* sin cuerpo */ }
+          throw new Error(msg);
+        }
+        return data;
+      },
+      async buscar(id) { return (await this.llamar({ accion: "buscar", vino_id: id })).candidatas; },
+      async guardar(id, url) { return (await this.llamar({ accion: "guardar", vino_id: id, url })).imagen_url; },
+      async auto(id) { return (await this.llamar({ accion: "auto", vino_id: id })).imagen_url; },
+    },
   };
 }
 
@@ -69,6 +83,7 @@ function crearStoreLocal() {
 
   return {
     modo: "local",
+    fotos: null,
     async usuario() { return { email: null }; },
     onAuth() {},
     async entrar() {},

@@ -24,6 +24,7 @@
           <button class="btn primary" id="btn-nuevo" type="button" hidden>+ Añadir vino</button>
           <button class="btn ghost" id="btn-menu" type="button" aria-haspopup="true" aria-expanded="false" hidden>⋯</button>
           <div class="menu" id="menu" hidden>
+            <button type="button" id="btn-fotos-todas">Buscar las fotos que faltan</button>
             <button type="button" id="btn-exportar">Exportar copia (JSON)</button>
             <button type="button" id="btn-importar">Importar copia (JSON)</button>
             <button type="button" id="btn-salir">Cerrar sesión</button>
@@ -80,6 +81,14 @@
   <dialog id="dlg">
     <form id="form-vino" method="dialog">
       <h2 id="dlg-titulo">Vino</h2>
+      <div class="fotos-bloque" id="fotos-bloque" hidden>
+        <div class="foto-grande" id="foto-actual"></div>
+        <div class="fotos-acciones">
+          <button class="btn ghost" type="button" id="btn-buscar-fotos">Buscar otra foto</button>
+          <p class="meta" id="fotos-estado" role="status"></p>
+        </div>
+        <div class="candidatas" id="candidatas"></div>
+      </div>
       <div class="grid">
         <label class="full">Nombre del vino<input name="nombre" required></label>
         <label>Bodega<input name="bodega"></label>
