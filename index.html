@@ -36,6 +36,8 @@
     <symbol id="i-subir" viewBox="0 0 24 24"><path d="M12 15V4m0 0L8 8m4-4 4 4M5 20h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
     <symbol id="i-salir" viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
     <symbol id="i-etiqueta" viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h3l1.5-2h3L15 6h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><circle cx="12" cy="13" r="3.5" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+    <symbol id="i-estrella" viewBox="0 0 24 24"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-bodega" viewBox="0 0 24 24"><path d="M4 20V9l8-5 8 5v11M8 20v-6h8v6M8 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
     <symbol id="i-reloj" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
   </svg>
   <div class="wrap">
@@ -68,6 +70,10 @@
           <input type="file" id="file-importar" accept="application/json" hidden>
         </div>
       </div>
+      <nav class="pestanas" id="pestanas" role="tablist" aria-label="Listas" hidden>
+        <button type="button" role="tab" data-pestana="bodega" aria-selected="true"><svg aria-hidden="true"><use href="#i-bodega"/></svg>Bodega <span class="num"></span></button>
+        <button type="button" role="tab" data-pestana="probados" aria-selected="false"><svg aria-hidden="true"><use href="#i-copa"/></svg>Probados <span class="num"></span></button>
+      </nav>
       <p class="aviso" id="aviso-demo" hidden>Modo demo: los cambios se guardan solo en este navegador. Conecta Supabase en <code>config.js</code> para sincronizar móvil y ordenador.</p>
       <p class="acceso" id="info-acceso" hidden></p>
       <section class="resumen" id="resumen" aria-label="Resumen"></section>
@@ -84,6 +90,10 @@
     </section>
 
     <main id="app" hidden>
+      <div class="vacio" id="vacio-probados" hidden>
+        <p>Aquí guardas los vinos que pruebas fuera de casa: con su foto, dónde lo tomaste, tu nota y lo que cuesta la botella.</p>
+        <button class="btn primary" type="button" id="btn-primer-probado"><svg aria-hidden="true"><use href="#i-mas"/></svg>Añadir el primero</button>
+      </div>
       <div class="vacio" id="vacio" hidden>
         <p>Tu bodega está vacía.</p>
         <button class="btn primary" type="button" id="btn-cargar-iniciales">Cargar mis 37 vinos del artefacto</button>
@@ -102,9 +112,10 @@
             <button class="chip" type="button" data-filter="espumoso" aria-pressed="false"><span class="dot espumoso"></span>Espumosos <span class="num"></span></button>
             <button class="chip" type="button" data-filter="rosado" aria-pressed="false"><span class="dot rosado"></span>Rosados <span class="num"></span></button>
             <span class="sep" aria-hidden="true"></span>
-            <button class="chip" type="button" data-filter="ya" aria-pressed="false">Beber ya <span class="num"></span></button>
-            <button class="chip" type="button" data-filter="guardar" aria-pressed="false">Guardar <span class="num"></span></button>
-            <button class="chip" type="button" data-filter="agotados" aria-pressed="false">Agotados <span class="num"></span></button>
+            <button class="chip" type="button" data-filter="ya" data-solo="bodega" aria-pressed="false">Beber ya <span class="num"></span></button>
+            <button class="chip" type="button" data-filter="guardar" data-solo="bodega" aria-pressed="false">Guardar <span class="num"></span></button>
+            <button class="chip" type="button" data-filter="agotados" data-solo="bodega" aria-pressed="false">Agotados <span class="num"></span></button>
+            <button class="chip" type="button" data-filter="favoritos" data-solo="probados" aria-pressed="false"><svg aria-hidden="true"><use href="#i-estrella"/></svg>8 o más <span class="num"></span></button>
           </nav>
           <div class="vistas" role="group" aria-label="Vista">
             <button class="vista" type="button" data-vista="lista" aria-pressed="true" aria-label="Lista" title="Lista"><svg aria-hidden="true"><use href="#i-lista"/></svg></button>
@@ -112,13 +123,7 @@
           </div>
           <label class="orden">
             <svg aria-hidden="true"><use href="#i-orden"/></svg>
-            <select id="orden" aria-label="Ordenar">
-              <option value="tipo">Por tipo</option>
-              <option value="urgencia">Por urgencia</option>
-              <option value="anada">Por añada</option>
-              <option value="nombre">Por nombre</option>
-              <option value="puntuacion">Por puntuación</option>
-            </select>
+            <select id="orden" aria-label="Ordenar"></select>
           </label>
         </div>
       </div>
@@ -135,13 +140,16 @@
     <form id="form-vino" method="dialog">
       <h2 id="dlg-titulo">Vino</h2>
       <div class="etiqueta-bloque" id="etiqueta-bloque" hidden>
-        <button class="btn primary" type="button" id="btn-etiqueta"><svg aria-hidden="true"><use href="#i-etiqueta"/></svg>Rellenar con una foto de la etiqueta</button>
+        <button class="btn primary" type="button" id="btn-etiqueta"><svg aria-hidden="true"><use href="#i-etiqueta"/></svg><span data-solo="bodega">Rellenar con una foto de la etiqueta</span><span data-solo="probados">Hacer una foto a la botella</span></button>
         <input type="file" id="file-etiqueta" accept="image/*" hidden>
+        <img class="etiqueta-vista" id="etiqueta-vista" alt="" hidden>
         <p class="meta" id="etiqueta-estado" role="status"></p>
       </div>
       <div class="fotos-bloque" id="fotos-bloque" hidden>
         <div class="foto-grande" id="foto-actual"></div>
         <div class="fotos-acciones">
+          <button class="btn ghost" type="button" id="btn-subir-foto">Subir tu foto</button>
+          <input type="file" id="file-foto" accept="image/*" hidden>
           <button class="btn ghost" type="button" id="btn-buscar-fotos">Buscar otra foto</button>
           <button class="btn ghost" type="button" id="btn-quitar-fondo">Quitar el fondo</button>
           <button class="btn ghost" type="button" id="btn-volver-original">Volver a la original</button>
@@ -160,7 +168,8 @@
           <label><input type="radio" name="tipo" value="otro"><span>Otro</span></label>
         </fieldset>
         <label>Añada<input name="anada" type="number" inputmode="numeric" min="1800" max="2100" placeholder="Sin añada"></label>
-        <div class="campo-botellas">
+        <label data-solo="probados">Fecha<input name="fecha_probado" type="date"></label>
+        <div class="campo-botellas" data-solo="bodega">
           <label for="f-botellas">Botellas</label>
           <div class="contador">
             <button type="button" data-paso="-1" aria-label="Una botella menos">−</button>
@@ -169,7 +178,23 @@
           </div>
         </div>
       </div>
-      <details class="seccion" open>
+      <details class="seccion" open data-solo="probados" data-resumen="mi_nota lugar precio">
+        <summary>Tu nota y dónde <span class="resumen-sec"></span></summary>
+        <div class="grid">
+          <div class="full campo-nota">
+            <div class="nota-cab">
+              <label for="f-nota">Tu nota</label>
+              <output id="nota-valor" for="f-nota"></output>
+              <button type="button" class="quitar-nota" id="btn-quitar-nota">Quitar</button>
+            </div>
+            <input id="f-nota" name="mi_nota" type="range" min="0" max="10" step="0.5" value="7">
+            <div class="nota-escala" aria-hidden="true"><span>0</span><span>5</span><span>10</span></div>
+          </div>
+          <label class="full">Dónde<input name="lugar" placeholder="Restaurante, ciudad…" autocomplete="off"></label>
+          <label class="full">Precio de la botella (€)<input name="precio" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Se busca solo al guardar"></label>
+        </div>
+      </details>
+      <details class="seccion" open data-resumen="bodega denominacion pais">
         <summary>Origen <span class="resumen-sec"></span></summary>
         <div class="grid">
           <label class="full">Bodega<input name="bodega"></label>
@@ -177,7 +202,7 @@
           <label>País<input name="pais"></label>
         </div>
       </details>
-      <details class="seccion" open>
+      <details class="seccion" open data-solo="bodega" data-resumen="estado ventana">
         <summary>Cuándo beber <span class="resumen-sec"></span></summary>
         <div class="grid">
           <fieldset class="full seg" data-campo="estado">
@@ -190,14 +215,14 @@
           <label class="full">Ventana<input name="ventana" placeholder="p. ej. 2026–2032 o hasta 2030"></label>
         </div>
       </details>
-      <details class="seccion" data-plegable>
+      <details class="seccion" data-plegable data-resumen="uvas puntuacion">
         <summary>Uvas y puntuación <span class="resumen-sec"></span></summary>
         <div class="grid">
           <label class="full">Uvas<input name="uvas"></label>
           <label class="full">Puntuación<input name="puntuacion" placeholder="p. ej. Peñín 92 · Vivino 4,1/5"></label>
         </div>
       </details>
-      <details class="seccion" data-plegable>
+      <details class="seccion" data-plegable data-resumen="cata notas">
         <summary>Cata y notas <span class="resumen-sec"></span></summary>
         <div class="grid">
           <label class="full">Nota de cata<textarea name="cata" rows="3"></textarea></label>
