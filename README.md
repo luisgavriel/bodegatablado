@@ -92,6 +92,20 @@ medio minuto y dos minutos y cuesta unos 15–30 céntimos por vino.
 termina este año o el siguiente, **Guardar** si aún no ha empezado y **En su punto** en el resto. Se aplica al
 escribir la ventana en la ficha, al guardar un vino nuevo y en lo que propone Claude desde la etiqueta.
 
+## Vinos probados
+
+Pestaña **Probados** para los vinos que pruebas fuera (en un restaurante…): foto, dónde y cuándo, tu nota
+de 0 a 10 (deslizador, de medio en medio) y el precio aproximado de la botella en tiendas. Van en la misma
+tabla `vinos` con `lista = 'probados'` y `botellas = 0`, así que comparten permisos, fotos y puntuaciones.
+
+1. *SQL Editor*: pega `supabase/probados.sql` y pulsa *Run*.
+2. Vuelve a desplegar `buscar-puntuaciones` (busca también el precio de los probados) y `buscar-imagen`
+   (acción `propia` para subir tu foto).
+
+Al añadir un probado, la foto que haces con «Hacer una foto a la botella» se queda como su foto y Claude
+rellena los datos. Al guardar se buscan puntuaciones y precio. Un precio escrito a mano no se sobrescribe.
+Desde la ficha, «Añadir a la bodega» crea una copia en la bodega con una botella.
+
 ## Compartir la bodega
 
 En Supabase, *SQL Editor*: pega `supabase/compartir.sql` y pulsa *Run*. Después, en la app, menú ⋯ →

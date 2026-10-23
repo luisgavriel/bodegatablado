@@ -7,6 +7,8 @@
 // POST { accion: "subir", vino_id, datos, tipo } → { imagen_url } (foto ya igualada en el navegador,
 //                                               en base64; tipo image/webp o image/png)
 // POST { accion: "original", vino_id }      → { imagen_url } (deshace la igualada)
+// POST { accion: "propia", vino_id, datos, tipo } → { imagen_url } (foto hecha por el usuario, en
+//                                               base64; sustituye a la actual como original)
 //
 // Secretos necesarios: BRAVE_API_KEY. Las claves de Supabase las pone
 // Supabase automáticamente.
@@ -181,6 +183,16 @@ Deno.serve(async (req) => {
       }
       const bytes = Uint8Array.from(atob(datos), (c) => c.charCodeAt(0));
       return respuesta({ imagen_url: await guardarIgualada(admin, vino, bytes, tipo) });
+    }
+
+    if (accion === "propia") {
+      const { datos, tipo } = cuerpo;
+      if (!["image/jpeg", "image/png", "image/webp"].includes(tipo)) return respuesta({ error: "Formato no admitido" }, 400);
+      if (typeof datos !== "string" || datos.length > MAX_BYTES * 1.4) {
+        return respuesta({ error: "Imagen vacía o demasiado grande" }, 400);
+      }
+      const bytes = Uint8Array.from(atob(datos), (c) => c.charCodeAt(0));
+      return respuesta({ imagen_url: await guardarBytes(admin, vino, bytes, tipo) });
     }
 
     if (accion === "original") return respuesta({ imagen_url: await volverAOriginal(admin, vino) });

@@ -4,7 +4,9 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
 
 const CAMPOS = ["nombre", "bodega", "denominacion", "pais", "tipo", "uvas", "anada",
-  "botellas", "estado", "ventana", "puntuacion", "cata", "notas", "imagen_url"];
+  "botellas", "estado", "ventana", "puntuacion", "cata", "notas", "imagen_url",
+  // Vinos probados (supabase/probados.sql).
+  "lista", "lugar", "fecha_probado", "mi_nota", "precio", "precio_url"];
 
 function limpiar(vino) {
   const out = {};
@@ -105,8 +107,14 @@ async function crearStoreSupabase() {
         const datos = await aBase64(blob);
         return (await this.llamar({ accion: "subir", vino_id: id, datos, tipo: blob.type })).imagen_url;
       },
+      // Foto hecha por Luis (la de la etiqueta o la del restaurante): sustituye a la actual.
+      async propia(id, blob) {
+        const datos = await aBase64(blob);
+        return (await this.llamar({ accion: "propia", vino_id: id, datos, tipo: blob.type })).imagen_url;
+      },
     },
-    // Busca en la web las notas de guías y Vivino y las guarda: { vino, encontradas }.
+    // Busca en la web las notas de guías y Vivino (y el precio de los
+    // probados) y las guarda: { vino, encontradas, precio }.
     puntuaciones: {
       buscar(id) { return invocar("buscar-puntuaciones", { vino_id: id }); },
     },

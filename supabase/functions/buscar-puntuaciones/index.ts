@@ -1,13 +1,18 @@
 // Busca en la web las puntuaciones de un vino (guías y Vivino) con Claude y
 // las guarda en el vino.
 //
-// POST { vino_id } → { vino } (la fila actualizada) y { encontradas: n }
+// POST { vino_id } → { vino } (la fila actualizada), { encontradas: n } y
+// { precio } (euros o null)
 //
 // Formato de la columna puntuacion (el mismo que se carga a mano): entradas
 // separadas por " · ", cada una "Fuente NN" con el nombre corto de la guía,
 // y Vivino siempre al final como "Vivino 4,1/5" (con "(media de añadas)" si
 // la nota no es de la añada del vino). Sin nada: "Sin puntuación publicada".
 // Las URLs de cada nota van en puntuacion_fuentes (jsonb), si la columna existe.
+//
+// Para los vinos probados (lista = 'probados', supabase/probados.sql) busca
+// además el precio aproximado de la botella en tiendas y lo guarda en precio
+// y precio_url. Un precio puesto a mano (sin precio_url) no se toca.
 //
 // Secretos necesarios: ANTHROPIC_API_KEY. Las claves de Supabase las pone
 // Supabase automáticamente.
@@ -41,6 +46,7 @@ function respuesta(cuerpo: unknown, status = 200) {
 type Vino = {
   id: string; user_id: string; nombre: string; bodega: string | null; anada: number | null;
   denominacion: string | null; pais: string | null; tipo: string; puntuacion: string | null;
+  lista?: string; precio?: number | null; precio_url?: string | null;
 };
 type Nota = { fuente: string; nota: string; anada: number | null; url: string };
 
@@ -66,8 +72,18 @@ Termina tu respuesta SOLO con un bloque \`\`\`json con esta forma:
  "vivino_id": 1234567 o null,
  "vivino": {"nota": "4,1", "anada": 2019, "url": "https://..."} o null}`;
 
+// Se añade al sistema cuando hay que buscar también el precio.
+const SISTEMA_PRECIO = `
+
+Busca también el precio actual de una botella de 75 cl de este vino en tiendas online, mejor
+españolas (Lavinia, Vila Viniteca, Bodeboca, Decántalo, Uvinum, El Corte Inglés…), en euros con IVA.
+Mejor de esa añada; si no la hay, de la más cercana. Si ves varias tiendas, da un precio típico, no
+el más raro. Es un precio aproximado, pero no lo inventes: si no lo encuentras, null.
+Añade al JSON: "precio": {"eur": 24.5, "tienda": "Lavinia", "url": "https://..."} o null.`;
+
 // Saca el último bloque JSON de la respuesta.
-function leerJson(texto: string): { guias?: Nota[]; vivino_id?: unknown; vivino?: Nota | null } {
+type Precio = { eur?: unknown; tienda?: unknown; url?: unknown };
+function leerJson(texto: string): { guias?: Nota[]; vivino_id?: unknown; vivino?: Nota | null; precio?: Precio | null } {
   const bloques = [...texto.matchAll(/```json\s*([\s\S]*?)```/g)];
   const crudo = bloques.length ? bloques[bloques.length - 1][1] : texto.slice(texto.indexOf("{"), texto.lastIndexOf("}") + 1);
   return JSON.parse(crudo);
@@ -127,8 +143,8 @@ Deno.serve(async (req) => {
     const { data: sesion, error: errSesion } = await usuario.auth.getUser(token);
     if (errSesion || !sesion.user) return respuesta({ error: "Tienes que iniciar sesión" }, 401);
 
-    const { data: fila, error } = await usuario.from("vinos")
-      .select("id, user_id, nombre, bodega, anada, denominacion, pais, tipo, puntuacion").eq("id", vino_id).single();
+    // "*" para no fallar si aún no existen las columnas de los probados.
+    const { data: fila, error } = await usuario.from("vinos").select("*").eq("id", vino_id).single();
     const vino = fila as Vino | null;
     if (error || !vino) return respuesta({ error: "Vino no encontrado" }, 404);
     const { data: editar, error: errEditar } = await usuario.rpc("puede_editar", { dueno: vino.user_id });
@@ -140,6 +156,9 @@ Deno.serve(async (req) => {
       `Añada: ${vino.anada ?? "sin añada (busca la nota general del vino)"}`,
       vino.denominacion && `Denominación: ${vino.denominacion}`, vino.pais && `País: ${vino.pais}`, `Tipo: ${vino.tipo}`,
     ].filter(Boolean).join("\n");
+
+    // El precio solo se busca en los probados y si no se puso a mano.
+    const conPrecio = vino.lista === "probados" && (vino.precio == null || !!vino.precio_url);
 
     const claude = new Anthropic({ timeout: 140_000, maxRetries: 1 }); // lee ANTHROPIC_API_KEY
     const mensajes: Anthropic.Beta.BetaMessageParam[] = [{ role: "user", content: descripcion }];
@@ -153,9 +172,9 @@ Deno.serve(async (req) => {
         // Si Opus rechaza la petición, la API la repite con el modelo que recomienda.
         betas: ["server-side-fallback-2026-07-01"],
         fallbacks: "default",
-        system: SISTEMA,
+        system: conPrecio ? SISTEMA + SISTEMA_PRECIO : SISTEMA,
         tools: [
-          { type: "web_search_20260209", name: "web_search", max_uses: 6 },
+          { type: "web_search_20260209", name: "web_search", max_uses: conPrecio ? 8 : 6 },
           { type: "web_fetch_20260209", name: "web_fetch", max_uses: 4 },
         ],
         messages: mensajes,
@@ -190,11 +209,20 @@ Deno.serve(async (req) => {
     const puntuacion = componer(vino.puntuacion, guias, vivino);
     const fuentes = [...guias, ...(vivino ? [vivino] : [])].map(({ fuente, nota, url }) => ({ fuente, nota, url }));
 
+    // Precio: un número razonable con la página de la tienda; redondeado al euro.
+    const p = datos.precio;
+    const eur = Number(p?.eur);
+    const precio: { precio?: number; precio_url?: string } = conPrecio && p && Number.isFinite(eur) && eur > 0 && eur < 100_000 && urlValida(p.url)
+      ? { precio: Math.round(eur), precio_url: p.url as string } : {};
+
     // puntuacion_fuentes solo existe si se ha aplicado supabase/puntuacion-fuentes.sql.
-    let res = await usuario.from("vinos").update({ puntuacion, puntuacion_fuentes: fuentes }).eq("id", vino.id).select().single();
-    if (res.error) res = await usuario.from("vinos").update({ puntuacion }).eq("id", vino.id).select().single();
+    let res = await usuario.from("vinos").update({ puntuacion, puntuacion_fuentes: fuentes, ...precio }).eq("id", vino.id).select().single();
+    if (res.error) {
+      delete precio.precio;
+      res = await usuario.from("vinos").update({ puntuacion }).eq("id", vino.id).select().single();
+    }
     if (res.error) throw res.error;
-    return respuesta({ vino: res.data, encontradas: fuentes.length });
+    return respuesta({ vino: res.data, encontradas: fuentes.length, precio: precio.precio ?? null });
   } catch (e) {
     console.error(e);
     if (e instanceof Anthropic.AuthenticationError) return respuesta({ error: "La clave ANTHROPIC_API_KEY no es válida" }, 500);
