@@ -43,8 +43,9 @@ y guarda la elegida en la carpeta pública `fotos` de Supabase Storage.
 3. *Edge Functions → Deploy a new function → Via Editor*: nombre `buscar-imagen`, pega `index.ts`, desactiva *Verify JWT* y despliega.
 4. *Edge Functions → Secrets*: añade `BRAVE_API_KEY` con tu clave.
 
-En la app: al añadir un vino se busca su foto sola; en la ficha de cada vino, *Buscar otra foto*;
-y en el menú ⋯, *Buscar las fotos que faltan*. Sin foto se muestra una botella dibujada.
+En la app: al añadir un vino se busca su foto sola y se le quita el fondo; al abrir la app, los vinos sin foto
+(por ejemplo, los que añade Claude desde el chat) reciben la suya de la misma manera; en la ficha de cada vino, *Buscar otra foto*;
+y en el menú ⋯, *Buscar las fotos que faltan* (también quita el fondo). Sin foto se muestra una botella dibujada.
 
 ## Fotos uniformes
 
@@ -102,8 +103,9 @@ tabla `vinos` con `lista = 'probados'` y `botellas = 0`, así que comparten perm
 2. Vuelve a desplegar `buscar-puntuaciones` (busca también el precio de los probados) y `buscar-imagen`
    (acción `propia` para subir tu foto).
 
-Al añadir un probado, la foto que haces con «Hacer una foto a la botella» se queda como su foto y Claude
-rellena los datos. Al guardar se buscan puntuaciones y precio. Un precio escrito a mano no se sobrescribe.
+Al añadir un probado, la foto que haces con «Hacer una foto a la botella» sirve para que Claude rellene los
+datos; como foto del vino se busca una en la web y se le quita el fondo, igual que en la bodega (tu foto solo
+se usa si no se encuentra ninguna). Al guardar se buscan puntuaciones y precio. Un precio escrito a mano no se sobrescribe.
 Desde la ficha, «Añadir a la bodega» crea una copia en la bodega con una botella.
 
 ## Compartir la bodega
