@@ -689,6 +689,52 @@ async function fotoAutomatica(id) {
   }
 }
 
+// Foto de un vino nuevo: la busca en la web y le quita el fondo, igual que
+// en la bodega. Si no encuentra ninguna y hay una foto propia (la hecha al
+// añadir un probado), usa esa. Devuelve null si ha ido bien o el error.
+async function fotoYFondo(id, fotoPropia = null) {
+  let error = await fotoAutomatica(id);
+  if (error && fotoPropia) {
+    try {
+      ponerFoto(id, await store.fotos.propia(id, fotoPropia));
+      error = null;
+    } catch (err) { return err.message || String(err); }
+  }
+  if (error) return error;
+  const v = vinos.find((x) => x.id === id);
+  if (v?.imagen_url && !estaNormalizada(v.imagen_url)) {
+    const sinFondo = await igualarFoto(v);
+    if (sinFondo) console.warn("Foto guardada con fondo:", v.nombre, sinFondo);
+  }
+  return null;
+}
+
+// Vinos sin foto (p. ej. los que añade Claude desde el chat): al abrir la
+// app se les busca foto y se les quita el fondo, de uno en uno y sin
+// estorbar. Los que no tienen foto en la web no se vuelven a buscar en este
+// navegador; «Buscar las fotos que faltan» los sigue intentando.
+const CLAVE_SIN_FOTO = "bodega-sin-foto";
+function sinFotoConocidos() {
+  try { return new Set(JSON.parse(localStorage.getItem(CLAVE_SIN_FOTO)) ?? []); } catch { return new Set(); }
+}
+async function completarFotos() {
+  if (!store.fotos || soloVer()) return;
+  const conocidos = sinFotoConocidos();
+  const pendientes = vinos.filter((v) => !v.imagen_url && !conocidos.has(v.id));
+  if (!pendientes.length) return;
+  let hechas = 0;
+  for (const [i, v] of pendientes.entries()) {
+    toast(`Buscando fotos de los vinos nuevos… ${i + 1} de ${pendientes.length}`, true);
+    const error = await fotoYFondo(v.id);
+    if (error) conocidos.add(v.id);
+    else hechas++;
+    // Si las tres primeras fallan, el problema es de configuración: parar.
+    if (!hechas && i === 2) break;
+  }
+  try { localStorage.setItem(CLAVE_SIN_FOTO, JSON.stringify([...conocidos])); } catch {}
+  toast(hechas ? `${hechas} ${hechas === 1 ? "foto nueva" : "fotos nuevas"}, sin fondo` : "No se encontraron fotos para los vinos nuevos");
+}
+
 function avisar(msg) {
   const aviso = $("#aviso-demo");
   aviso.textContent = msg;
@@ -703,7 +749,7 @@ async function fotosQueFaltan() {
   for (const [i, v] of pendientes.entries()) {
     const paso = `Buscando fotos… ${i + 1} de ${pendientes.length} · ${hechas} guardadas`;
     toast(paso, true);
-    const error = await fotoAutomatica(v.id);
+    const error = await fotoYFondo(v.id);
     if (error) fallos.push(`${v.nombre}: ${error}`);
     else hechas++;
     // Si las tres primeras fallan, el problema es de configuración: parar y enseñarlo.
@@ -815,7 +861,7 @@ async function leerEtiqueta(file) {
   estado.textContent = "Claude está leyendo la etiqueta… (unos segundos)";
   try {
     const foto = await reducirFoto(file);
-    // En los probados, la foto hecha se queda como foto del vino.
+    // En los probados se guarda la foto hecha por si no se encuentra otra en la web.
     if (pestana === "probados") {
       fotoNueva = foto;
       const vista = $("#etiqueta-vista");
@@ -876,11 +922,9 @@ async function guardar(e) {
       else datos.estado = estadoSegunVentana(datos.ventana) ?? datos.estado;
       const nuevo = await store.crear(datos);
       vinos.push(nuevo);
-      const foto = fotoNueva;
-      if (store.fotos && foto) {
-        store.fotos.propia(nuevo.id, foto).then((url) => { ponerFoto(nuevo.id, url); render(); })
-          .catch((e) => toast("No se pudo guardar tu foto: " + e.message));
-      } else if (store.fotos) fotoAutomatica(nuevo.id).then((e) => e && toast("Sin foto: " + e));
+      // Se busca la foto en la web y se le quita el fondo; la que hayas hecho
+      // tú solo se usa si no se encuentra ninguna.
+      if (store.fotos) fotoYFondo(nuevo.id, fotoNueva).then((e) => e && toast("Sin foto: " + e));
       if (store.puntuaciones) buscarPuntuaciones(nuevo.id);
     }
     $("#dlg").close();
@@ -1107,6 +1151,7 @@ async function mostrar(usuario) {
     return;
   }
   render();
+  completarFotos();
 }
 
 function enlazar() {
