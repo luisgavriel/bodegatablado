@@ -1,8 +1,8 @@
 // Busca en la web las puntuaciones de un vino (guías y Vivino) con Claude y
 // las guarda en el vino.
 //
-// POST { vino_id } → { vino } (la fila actualizada), { encontradas: n } y
-// { precio } (euros o null)
+// POST { vino_id, solo? } → { vino } (la fila actualizada), { encontradas: n } y
+// { precio } (euros o null). Con solo = "precio" busca únicamente el precio.
 //
 // Formato de la columna puntuacion (el mismo que se carga a mano): entradas
 // separadas por " · ", cada una "Fuente NN" con el nombre corto de la guía,
@@ -10,9 +10,9 @@
 // la nota no es de la añada del vino). Sin nada: "Sin puntuación publicada".
 // Las URLs de cada nota van en puntuacion_fuentes (jsonb), si la columna existe.
 //
-// Para los vinos probados (lista = 'probados', supabase/probados.sql) busca
-// además el precio aproximado de la botella en tiendas y lo guarda en precio
-// y precio_url. Un precio puesto a mano (sin precio_url) no se toca.
+// Busca además el precio aproximado de la botella en tiendas y lo guarda en
+// precio y precio_url. Un precio puesto a mano (sin precio_url) no se toca,
+// y en la lista de la compra (lista = 'comprar') solo se busca si falta.
 //
 // Secretos necesarios: ANTHROPIC_API_KEY. Las claves de Supabase las pone
 // Supabase automáticamente.
@@ -81,6 +81,15 @@ Mejor de esa añada; si no la hay, de la más cercana. Si ves varias tiendas, da
 el más raro. Es un precio aproximado, pero no lo inventes: si no lo encuentras, null.
 Añade al JSON: "precio": {"eur": 24.5, "tienda": "Lavinia", "url": "https://..."} o null.`;
 
+// Cuando solo se pide el precio (solo = "precio").
+const SISTEMA_SOLO_PRECIO = `Buscas en la web el precio actual de una botella de 75 cl de un vino concreto en tiendas
+online, mejor españolas (Lavinia, Vila Viniteca, Bodeboca, Decántalo, Uvinum, El Corte Inglés…), en euros con
+IVA. Mejor de esa añada; si no la hay, de la más cercana. Si ves varias tiendas, da un precio típico, no el
+más raro. Es un precio aproximado, pero no lo inventes: si no lo encuentras, null.
+
+Termina tu respuesta SOLO con un bloque \`\`\`json con esta forma:
+{"precio": {"eur": 24.5, "tienda": "Lavinia", "url": "https://..."} o null}`;
+
 // Saca el último bloque JSON de la respuesta.
 type Precio = { eur?: unknown; tienda?: unknown; url?: unknown };
 function leerJson(texto: string): { guias?: Nota[]; vivino_id?: unknown; vivino?: Nota | null; precio?: Precio | null } {
@@ -133,7 +142,8 @@ Deno.serve(async (req) => {
     if (!Deno.env.get("ANTHROPIC_API_KEY")) {
       return respuesta({ error: "Falta el secreto ANTHROPIC_API_KEY en Supabase" }, 500);
     }
-    const { vino_id } = await req.json();
+    const { vino_id, solo } = await req.json();
+    const soloPrecio = solo === "precio";
 
     // Cliente con la sesión del usuario: las políticas RLS deciden qué vinos ve y cambia.
     const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
@@ -157,8 +167,10 @@ Deno.serve(async (req) => {
       vino.denominacion && `Denominación: ${vino.denominacion}`, vino.pais && `País: ${vino.pais}`, `Tipo: ${vino.tipo}`,
     ].filter(Boolean).join("\n");
 
-    // El precio solo se busca en los probados y si no se puso a mano.
-    const conPrecio = vino.lista === "probados" && (vino.precio == null || !!vino.precio_url);
+    // El precio no se busca si se puso a mano; en la lista de la compra,
+    // solo si falta (el enlace es el de la tienda que eligió el usuario).
+    const conPrecio = vino.lista === "comprar" ? vino.precio == null : (vino.precio == null || !!vino.precio_url);
+    if (soloPrecio && !conPrecio) return respuesta({ vino, encontradas: 0, precio: null });
 
     const claude = new Anthropic({ timeout: 140_000, maxRetries: 1 }); // lee ANTHROPIC_API_KEY
     const mensajes: Anthropic.Beta.BetaMessageParam[] = [{ role: "user", content: descripcion }];
@@ -172,10 +184,10 @@ Deno.serve(async (req) => {
         // Si Opus rechaza la petición, la API la repite con el modelo que recomienda.
         betas: ["server-side-fallback-2026-07-01"],
         fallbacks: "default",
-        system: conPrecio ? SISTEMA + SISTEMA_PRECIO : SISTEMA,
+        system: soloPrecio ? SISTEMA_SOLO_PRECIO : conPrecio ? SISTEMA + SISTEMA_PRECIO : SISTEMA,
         tools: [
-          { type: "web_search_20260209", name: "web_search", max_uses: conPrecio ? 8 : 6 },
-          { type: "web_fetch_20260209", name: "web_fetch", max_uses: 4 },
+          { type: "web_search_20260209", name: "web_search", max_uses: soloPrecio ? 3 : conPrecio ? 8 : 6 },
+          { type: "web_fetch_20260209", name: "web_fetch", max_uses: soloPrecio ? 2 : 4 },
         ],
         messages: mensajes,
       });
@@ -214,6 +226,13 @@ Deno.serve(async (req) => {
     const eur = Number(p?.eur);
     const precio: { precio?: number; precio_url?: string } = conPrecio && p && Number.isFinite(eur) && eur > 0 && eur < 100_000 && urlValida(p.url)
       ? { precio: Math.round(eur), precio_url: p.url as string } : {};
+
+    if (soloPrecio) {
+      if (precio.precio == null) return respuesta({ vino, encontradas: 0, precio: null });
+      const soloRes = await usuario.from("vinos").update(precio).eq("id", vino.id).select().single();
+      if (soloRes.error) throw soloRes.error;
+      return respuesta({ vino: soloRes.data, encontradas: 0, precio: precio.precio });
+    }
 
     // puntuacion_fuentes solo existe si se ha aplicado supabase/puntuacion-fuentes.sql.
     let res = await usuario.from("vinos").update({ puntuacion, puntuacion_fuentes: fuentes, ...precio }).eq("id", vino.id).select().single();

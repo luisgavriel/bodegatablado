@@ -23,6 +23,21 @@ function aBase64(blob) {
   });
 }
 
+export async function comprarIniciales() {
+  const res = await fetch("comprar-iniciales.json");
+  return res.json();
+}
+
+// Campos de una botella abierta (tabla consumos, supabase/consumos.sql).
+const CAMPOS_CONSUMO = ["vino_id", "nombre", "anada", "tipo", "fecha", "ocasion", "nota", "comentario"];
+function limpiarConsumo(c) {
+  const out = {};
+  for (const k of CAMPOS_CONSUMO) if (k in c) out[k] = c[k] === "" ? null : c[k];
+  return out;
+}
+const ordenarConsumos = (lista) => lista.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))
+  || String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
+
 export async function vinosIniciales() {
   const res = await fetch("vinos-iniciales.json");
   return res.json();
@@ -97,6 +112,20 @@ async function crearStoreSupabase() {
       return check(await sb.from("vinos").update(limpiar(cambios)).eq("id", id).select().single());
     },
     async borrar(id) { check(await sb.from("vinos").delete().eq("id", id)); },
+    // Diario de botellas abiertas, de la más reciente a la más antigua.
+    consumos: {
+      async listar() {
+        return check(await sb.from("consumos").select("*").eq("user_id", acceso.dueno)
+          .order("fecha", { ascending: false }).order("created_at", { ascending: false }));
+      },
+      async crear(c) {
+        return check(await sb.from("consumos").insert({ ...limpiarConsumo(c), user_id: acceso.dueno }).select().single());
+      },
+      async actualizar(id, cambios) {
+        return check(await sb.from("consumos").update(limpiarConsumo(cambios)).eq("id", id).select().single());
+      },
+      async borrar(id) { check(await sb.from("consumos").delete().eq("id", id)); },
+    },
     fotos: {
       llamar(body) { return invocar("buscar-imagen", body); },
       async buscar(id) { return (await this.llamar({ accion: "buscar", vino_id: id })).candidatas; },
@@ -113,10 +142,11 @@ async function crearStoreSupabase() {
         return (await this.llamar({ accion: "propia", vino_id: id, datos, tipo: blob.type })).imagen_url;
       },
     },
-    // Busca en la web las notas de guías y Vivino (y el precio de los
-    // probados) y las guarda: { vino, encontradas, precio }.
+    // Busca en la web las notas de guías y Vivino y el precio de la botella
+    // y los guarda: { vino, encontradas, precio }. Con solo = "precio" busca
+    // únicamente el precio, que es más rápido.
     puntuaciones: {
-      buscar(id) { return invocar("buscar-puntuaciones", { vino_id: id }); },
+      buscar(id, solo) { return invocar("buscar-puntuaciones", { vino_id: id, solo }); },
     },
     // Lee la foto de una etiqueta con Claude: { vino: {...campos}, aviso }.
     etiqueta: {
@@ -129,6 +159,7 @@ async function crearStoreSupabase() {
 
 // ---- Local (modo demo) ----
 const CLAVE = "bodega-vinos";
+const CLAVE_CONSUMOS = "bodega-consumos";
 
 function leerLocal() {
   try { return JSON.parse(localStorage.getItem(CLAVE)) ?? null; } catch { return null; }
@@ -166,6 +197,22 @@ function crearStoreLocal() {
       return actualizado;
     },
     async borrar(id) { persistir(todos().filter((v) => v.id !== id)); },
+    consumos: {
+      leer() { try { return JSON.parse(localStorage.getItem(CLAVE_CONSUMOS)) ?? []; } catch { return []; } },
+      guardar(lista) { try { localStorage.setItem(CLAVE_CONSUMOS, JSON.stringify(lista)); } catch { /* sin almacenamiento */ } },
+      async listar() { return ordenarConsumos(this.leer()); },
+      async crear(c) {
+        const nuevoC = { ...limpiarConsumo(c), id: crypto.randomUUID(), created_at: new Date().toISOString() };
+        this.guardar([...this.leer(), nuevoC]);
+        return nuevoC;
+      },
+      async actualizar(id, cambios) {
+        let actualizado;
+        this.guardar(this.leer().map((c) => (c.id === id ? (actualizado = { ...c, ...limpiarConsumo(cambios) }) : c)));
+        return actualizado;
+      },
+      async borrar(id) { this.guardar(this.leer().filter((c) => c.id !== id)); },
+    },
   };
 }
 

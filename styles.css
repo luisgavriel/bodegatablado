@@ -628,11 +628,13 @@ dialog.ficha {
 .wrap, .top, #lista, .grupo, .ledger { grid-template-columns: minmax(0, 1fr); }
 
 /* Lo que solo es de una lista se oculta en la otra. */
-[data-lista="probados"] [data-solo="bodega"], [data-lista="bodega"] [data-solo="probados"] { display: none !important; }
+[data-lista="bodega"] [data-solo]:not([data-solo~="bodega"]),
+[data-lista="probados"] [data-solo]:not([data-solo~="probados"]),
+[data-lista="comprar"] [data-solo]:not([data-solo~="comprar"]) { display: none !important; }
 
 /* Pestañas Bodega / Probados. */
 .pestanas {
-  display: inline-grid; grid-template-columns: 1fr 1fr; gap: 3px; justify-self: start;
+  display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; justify-self: start;
   padding: 4px; border-radius: 999px; background: var(--surface);
 }
 .pestanas button {
@@ -710,8 +712,14 @@ dialog.ficha {
 .etiqueta-vista { max-height: 180px; max-width: 100%; border-radius: 12px; object-fit: contain; }
 
 @media (max-width: 520px) {
-  .pestanas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); justify-self: stretch; }
-  .pestanas button { padding: 10px 8px; }
+  .pestanas { display: grid; grid-auto-columns: minmax(0, 1fr); justify-self: stretch; }
+  .pestanas button { padding: 10px 4px; gap: 5px; font-size: 13px; }
+  .pestanas svg { width: 15px; height: 15px; }
+  .pestanas .largo { display: none; }
+  .pestanas .corto { display: inline; }
+  .resumen:not(.abierto) .valor { display: none; }
+  #lista:not(.galeria) .precio-col b { font-size: 16px; }
+  .toast.con-acciones { border-radius: 22px; }
   #lista:not(.galeria) .meta.donde { font-size: 12.5px; }
   #lista:not(.galeria) .precio { font-size: 12px; padding: 2px 9px; }
   #lista:not(.galeria) .mi-nota { --t: 44px; }
@@ -750,3 +758,35 @@ dialog.ficha {
 dialog.ficha.con-vuelo[open], dialog.ficha.con-vuelo[open]::backdrop { animation: none; }
 ::view-transition-group(foto-vino) { animation-duration: .34s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
 ::view-transition-old(foto-vino), ::view-transition-new(foto-vino) { height: 100%; width: 100%; object-fit: contain; }
+
+/* ---- Por comprar, valor de la bodega y diario ---- */
+@media (min-width: 521px) { .pestanas .corto { display: none; } }
+.fila-botones { display: flex; flex-wrap: wrap; gap: 8px; }
+.valor { margin: 0; font-size: 13.5px; color: var(--muted); }
+.valor b { font: 500 19px/1 var(--font-display); color: var(--ink); margin-right: 4px; font-variant-numeric: tabular-nums; }
+.precio-col b { font: 500 19px/1 var(--font-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.precio-col .vacia { color: var(--muted); opacity: .6; }
+.precio-grande { font: 500 34px/1 var(--font-display); font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--accent); }
+.precio-grande.vacia { color: var(--muted); opacity: .6; }
+.ficha-acciones .pasar { padding-inline: 14px; }
+.solo-ver .ficha [data-querer], .solo-ver .ficha [data-comprado] { display: none; }
+
+.diario { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; }
+.consumo {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; cursor: pointer;
+  font: inherit; color: inherit; background: var(--surface); border: 1px solid transparent; border-radius: 12px; padding: 9px 12px;
+}
+.consumo:hover { border-color: var(--rule); }
+.consumo:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.consumo .cuando { flex: none; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.consumo .que { flex: 1; min-width: 0; display: grid; font-size: 14px; }
+.consumo .que b { font: 500 16px/1.25 var(--font-display); }
+.consumo .que span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.consumo .que b + span { font-size: 13px; color: var(--muted); }
+.consumo .vacio-txt { color: var(--muted); }
+.consumo .nota {
+  flex: none; font: 500 16px/1 var(--font-display); font-variant-numeric: tabular-nums; color: var(--accent);
+  border: 1.5px solid var(--accent); border-radius: 999px; padding: 4px 9px;
+}
+.solo-ver .consumo { cursor: default; }
+#dlg-consumo { width: min(480px, calc(100vw - 24px)); }
