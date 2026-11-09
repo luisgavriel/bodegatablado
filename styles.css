@@ -717,3 +717,36 @@ dialog.ficha {
   #lista:not(.galeria) .mi-nota { --t: 44px; }
   #lista:not(.galeria) .mi-nota b { font-size: 17px; }
 }
+
+/* ---- Ubicación, avisos con botones y gestos ---- */
+.meta.ubic { margin-top: 4px; }
+.dlg-acciones.envolver { flex-wrap: wrap; }
+#dlg-duplicado { width: min(460px, calc(100vw - 24px)); }
+#dlg-duplicado p { margin: 0; }
+.toast { display: flex; align-items: center; gap: 4px; width: max-content; max-width: calc(100vw - 24px); }
+.toast.con-acciones { padding: 6px 6px 6px 16px; }
+.toast span { min-width: 0; }
+.toast button {
+  flex: none; font: 600 13.5px var(--font-ui); color: inherit; background: color-mix(in srgb, var(--paper) 16%, transparent);
+  border: 0; border-radius: 999px; padding: 8px 12px; margin-left: 6px; cursor: pointer;
+}
+
+/* Deslizar una fila de la lista: a la izquierda «Abrir una», a la derecha
+   «Editar». El rótulo viaja pegado a la fila. */
+#lista:not(.galeria) .wine { touch-action: pan-y; position: relative; }
+#lista:not(.galeria) .ledger { overflow-x: clip; }
+.wine.volviendo { transition: transform .25s cubic-bezier(.2, .8, .2, 1); }
+.wine.deslizando::before, .wine.deslizando::after {
+  position: absolute; top: 0; bottom: 0; width: 128px; display: flex; align-items: center;
+  font: 600 13.5px var(--font-ui); color: var(--muted); white-space: nowrap; transition: color .15s;
+}
+.wine.deslizando::after { content: "Abrir una"; left: 100%; padding-left: 18px; }
+.wine.deslizando::before { content: "Editar"; right: 100%; justify-content: flex-end; padding-right: 18px; }
+.wine.deslizando.sin-abrir::after { content: none; }
+.wine.deslizando.listo::before, .wine.deslizando.listo::after { color: var(--accent); }
+
+/* La foto vuela de la lista a la ficha; mientras, la ficha aparece sin su
+   animación de entrada. */
+dialog.ficha.con-vuelo[open], dialog.ficha.con-vuelo[open]::backdrop { animation: none; }
+::view-transition-group(foto-vino) { animation-duration: .34s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+::view-transition-old(foto-vino), ::view-transition-new(foto-vino) { height: 100%; width: 100%; object-fit: contain; }

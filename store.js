@@ -4,7 +4,7 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
 
 const CAMPOS = ["nombre", "bodega", "denominacion", "pais", "tipo", "uvas", "anada",
-  "botellas", "estado", "ventana", "puntuacion", "cata", "notas", "imagen_url",
+  "botellas", "estado", "ventana", "puntuacion", "cata", "notas", "imagen_url", "ubicacion",
   // Vinos probados (supabase/probados.sql).
   "lista", "lugar", "fecha_probado", "mi_nota", "precio", "precio_url"];
 
