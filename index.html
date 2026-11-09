@@ -38,6 +38,11 @@
     <symbol id="i-etiqueta" viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h3l1.5-2h3L15 6h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><circle cx="12" cy="13" r="3.5" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
     <symbol id="i-estrella" viewBox="0 0 24 24"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/></symbol>
     <symbol id="i-bodega" viewBox="0 0 24 24"><path d="M4 20V9l8-5 8 5v11M8 20v-6h8v6M8 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-bolsa" viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><path d="M9 8V7a3 3 0 0 1 6 0v1" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
+    <symbol id="i-grafico" viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></symbol>
+    <symbol id="i-calendario" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M4 10h16M8 3v4M16 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-chispa" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><circle cx="12" cy="10" r="2.3" fill="currentColor"/></symbol>
     <symbol id="i-reloj" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
   </svg>
   <div class="wrap">
@@ -51,6 +56,9 @@
             <div class="menu-sec">
               <p class="menu-tit">Bodega</p>
               <button type="button" id="btn-compartir"><svg aria-hidden="true"><use href="#i-compartir"/></svg>Compartir bodega</button>
+              <button type="button" id="btn-menu-sumiller"><svg aria-hidden="true"><use href="#i-chispa"/></svg>¿Qué abro hoy?</button>
+              <button type="button" id="btn-menu-estadisticas"><svg aria-hidden="true"><use href="#i-grafico"/></svg>Estadísticas y diario</button>
+              <button type="button" id="btn-precios"><svg aria-hidden="true"><use href="#i-bolsa"/></svg>Buscar los precios que faltan</button>
             </div>
             <div class="menu-sec">
               <p class="menu-tit">Fotos</p>
@@ -73,6 +81,7 @@
       <nav class="pestanas" id="pestanas" role="tablist" aria-label="Listas" hidden>
         <button type="button" role="tab" data-pestana="bodega" aria-selected="true"><svg aria-hidden="true"><use href="#i-bodega"/></svg>Bodega <span class="num"></span></button>
         <button type="button" role="tab" data-pestana="probados" aria-selected="false"><svg aria-hidden="true"><use href="#i-copa"/></svg>Probados <span class="num"></span></button>
+        <button type="button" role="tab" data-pestana="comprar" aria-selected="false"><svg aria-hidden="true"><use href="#i-bolsa"/></svg><span class="largo">Por comprar</span><span class="corto">Comprar</span> <span class="num"></span></button>
       </nav>
       <p class="aviso" id="aviso-demo" hidden>Modo demo: los cambios se guardan solo en este navegador. Conecta Supabase en <code>config.js</code> para sincronizar móvil y ordenador.</p>
       <p class="acceso" id="info-acceso" hidden></p>
@@ -93,6 +102,13 @@
       <div class="vacio" id="vacio-probados" hidden>
         <p>Aquí guardas los vinos que pruebas fuera de casa: con su foto, dónde lo tomaste, tu nota y lo que cuesta la botella.</p>
         <button class="btn primary" type="button" id="btn-primer-probado"><svg aria-hidden="true"><use href="#i-mas"/></svg>Añadir el primero</button>
+      </div>
+      <div class="vacio" id="vacio-comprar" hidden>
+        <p>Aquí apuntas los vinos que quieres comprar, con su precio y el enlace a la tienda. Cuando compres uno, pasa a la bodega con un toque.</p>
+        <div class="fila-botones">
+          <button class="btn primary" type="button" id="btn-primer-comprar"><svg aria-hidden="true"><use href="#i-mas"/></svg>Añadir el primero</button>
+          <button class="btn ghost" type="button" id="btn-cargar-comprar">Cargar las 8 sugerencias del artefacto</button>
+        </div>
       </div>
       <div class="vacio" id="vacio" hidden>
         <p>Tu bodega está vacía.</p>
@@ -120,6 +136,7 @@
           <div class="vistas" role="group" aria-label="Vista">
             <button class="vista" type="button" data-vista="lista" aria-pressed="true" aria-label="Lista" title="Lista"><svg aria-hidden="true"><use href="#i-lista"/></svg></button>
             <button class="vista" type="button" data-vista="galeria" aria-pressed="false" aria-label="Galería" title="Galería"><svg aria-hidden="true"><use href="#i-galeria"/></svg></button>
+            <button class="vista" type="button" data-vista="calendario" data-solo="bodega" aria-pressed="false" aria-label="Calendario de consumo" title="Calendario de consumo"><svg aria-hidden="true"><use href="#i-calendario"/></svg></button>
           </div>
           <label class="orden">
             <svg aria-hidden="true"><use href="#i-orden"/></svg>
@@ -140,7 +157,7 @@
     <form id="form-vino" method="dialog">
       <h2 id="dlg-titulo">Vino</h2>
       <div class="etiqueta-bloque" id="etiqueta-bloque" hidden>
-        <button class="btn primary" type="button" id="btn-etiqueta"><svg aria-hidden="true"><use href="#i-etiqueta"/></svg><span data-solo="bodega">Rellenar con una foto de la etiqueta</span><span data-solo="probados">Hacer una foto a la botella</span></button>
+        <button class="btn primary" type="button" id="btn-etiqueta"><svg aria-hidden="true"><use href="#i-etiqueta"/></svg><span data-solo="bodega comprar">Rellenar con una foto de la etiqueta</span><span data-solo="probados">Hacer una foto a la botella</span></button>
         <input type="file" id="file-etiqueta" accept="image/*" hidden>
         <img class="etiqueta-vista" id="etiqueta-vista" alt="" hidden>
         <p class="meta" id="etiqueta-estado" role="status"></p>
@@ -177,8 +194,12 @@
             <button type="button" data-paso="1" aria-label="Una botella más">+</button>
           </div>
         </div>
+        <label>Precio de la botella (€)<input name="precio" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Se busca solo al guardar"></label>
+        <label class="full" data-solo="comprar">Enlace a la tienda<input name="precio_url" type="url" inputmode="url" placeholder="https://…" autocomplete="off"></label>
+        <label class="full" data-solo="bodega">Dónde está<input name="ubicacion" list="lista-ubicaciones" placeholder="Botellero, fila, caja…" autocomplete="off"></label>
+        <datalist id="lista-ubicaciones"></datalist>
       </div>
-      <details class="seccion" open data-solo="probados" data-resumen="mi_nota lugar precio">
+      <details class="seccion" open data-solo="probados" data-resumen="mi_nota lugar">
         <summary>Tu nota y dónde <span class="resumen-sec"></span></summary>
         <div class="grid">
           <div class="full campo-nota">
@@ -191,7 +212,6 @@
             <div class="nota-escala" aria-hidden="true"><span>0</span><span>5</span><span>10</span></div>
           </div>
           <label class="full">Dónde<input name="lugar" placeholder="Restaurante, ciudad…" autocomplete="off"></label>
-          <label class="full">Precio de la botella (€)<input name="precio" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Se busca solo al guardar"></label>
         </div>
       </details>
       <details class="seccion" open data-resumen="bodega denominacion pais">
@@ -202,7 +222,7 @@
           <label>País<input name="pais"></label>
         </div>
       </details>
-      <details class="seccion" open data-solo="bodega" data-resumen="estado ventana">
+      <details class="seccion" open data-solo="bodega comprar" data-resumen="estado ventana">
         <summary>Cuándo beber <span class="resumen-sec"></span></summary>
         <div class="grid">
           <fieldset class="full seg" data-campo="estado">
@@ -257,6 +277,69 @@
         <button class="btn ghost" type="button" id="btn-cerrar-compartir">Cerrar</button>
       </div>
     </div>
+  </dialog>
+
+  <dialog id="dlg-sumiller">
+    <form class="compartir" id="form-sumiller">
+      <h2>¿Qué abro hoy?</h2>
+      <p class="meta">Cuéntame qué vas a comer o qué te apetece y te propongo tres vinos de tu bodega, empezando por los que conviene beber pronto.</p>
+      <div class="ideas" id="sumiller-ideas">
+        <button class="chip" type="button">Carne a la brasa</button>
+        <button class="chip" type="button">Pescado o marisco</button>
+        <button class="chip" type="button">Aperitivo con amigos</button>
+        <button class="chip" type="button">Una celebración</button>
+        <button class="chip" type="button">Algo ligero entre semana</button>
+      </div>
+      <textarea name="pregunta" rows="2" placeholder="P. ej. cordero asado con mis padres" aria-label="Qué vas a comer o qué te apetece"></textarea>
+      <div id="sumiller-res" role="status"></div>
+      <div class="dlg-acciones">
+        <span class="sp"></span>
+        <button class="btn ghost" type="button" id="btn-cerrar-sumiller">Cerrar</button>
+        <button class="btn primary" type="submit" id="btn-proponer"><svg aria-hidden="true"><use href="#i-chispa"/></svg>Proponer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-estadisticas">
+    <div class="compartir estadisticas">
+      <div class="est-cab">
+        <h2>Estadísticas</h2>
+        <button class="btn ghost icono" type="button" id="btn-cerrar-estadisticas" aria-label="Cerrar"><svg aria-hidden="true"><use href="#i-cerrar"/></svg></button>
+      </div>
+      <div id="estadisticas"></div>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-consumo">
+    <form class="compartir" id="form-consumo" method="dialog">
+      <h2>Botella abierta</h2>
+      <p class="meta" id="consumo-vino"></p>
+      <div class="grid">
+        <label>Fecha<input name="fecha" type="date" required></label>
+        <label>Tu nota (0–10)<input name="nota" type="number" inputmode="decimal" min="0" max="10" step="0.5" placeholder="Sin nota"></label>
+        <label class="full">Ocasión<input name="ocasion" placeholder="Cena con amigos, con cordero…" autocomplete="off"></label>
+        <label class="full">Qué te pareció<textarea name="comentario" rows="2"></textarea></label>
+      </div>
+      <div class="dlg-acciones">
+        <button class="btn danger" type="button" id="btn-borrar-consumo">Quitar del diario</button>
+        <span class="sp"></span>
+        <button class="btn ghost" type="button" id="btn-cancelar-consumo">Cancelar</button>
+        <button class="btn primary" type="submit">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-duplicado">
+    <form class="compartir" method="dialog">
+      <h2>Ya tienes este vino</h2>
+      <p id="dup-texto"></p>
+      <div class="dlg-acciones envolver">
+        <button class="btn ghost" type="submit" value="cancelar">Cancelar</button>
+        <span class="sp"></span>
+        <button class="btn ghost" type="submit" value="crear">Crear otro</button>
+        <button class="btn primary" type="submit" value="sumar" id="dup-sumar">Sumar botellas</button>
+      </div>
+    </form>
   </dialog>
 
   <div class="toast" id="toast" role="status" hidden></div>

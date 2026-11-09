@@ -1,4 +1,4 @@
-import { crearStore, vinosIniciales } from "./store.js";
+import { crearStore, vinosIniciales, comprarIniciales } from "./store.js";
 import { normalizar, estaNormalizada } from "./normalizar.js";
 import { estadoSegunVentana, leerVentana } from "./ventana.js";
 
@@ -10,7 +10,8 @@ const ESTADOS = { urg: "Urgente", ya: "Beber ya", punto: "En su punto", guardar:
 const URGENCIA = { urg: 0, ya: 1, punto: 2, guardar: 3 };
 // Órdenes de cada pestaña; el primero es el de por defecto.
 const ORDENES = {
-  bodega: [["tipo", "Por tipo"], ["urgencia", "Por urgencia"], ["anada", "Por añada"], ["nombre", "Por nombre"], ["puntuacion", "Por puntuación"]],
+  bodega: [["tipo", "Por tipo"], ["urgencia", "Por urgencia"], ["anada", "Por añada"], ["nombre", "Por nombre"], ["puntuacion", "Por puntuación"], ["precio", "Por precio"]],
+  comprar: [["reciente", "Más recientes"], ["precio", "Por precio"], ["tipo", "Por tipo"], ["nombre", "Por nombre"], ["puntuacion", "Por puntuación"]],
   probados: [["fecha", "Más recientes"], ["mi_nota", "Por tu nota"], ["tipo", "Por tipo"], ["precio", "Por precio"], ["nombre", "Por nombre"], ["puntuacion", "Por puntuación"]],
 };
 
@@ -22,13 +23,16 @@ let store;
 let vinos = [];
 let filtro = "todo";
 let busqueda = "";
-// Pestaña a la vista: la bodega o los vinos probados fuera (en un
-// restaurante…). Los dos van en la misma tabla, separados por la columna
-// lista. Se recuerda en este navegador.
+// Botellas abiertas (el diario), de la más reciente a la más antigua.
+let consumos = [];
+// Pestaña a la vista: la bodega, los vinos probados fuera (en un
+// restaurante…) o los que quieres comprar. Van en la misma tabla, separados
+// por la columna lista. Se recuerda en este navegador.
+const LISTAS = ["bodega", "probados", "comprar"];
 let pestana = (() => {
-  try { return localStorage.getItem("bodega-pestana") === "probados" ? "probados" : "bodega"; } catch { return "bodega"; }
+  try { const p = localStorage.getItem("bodega-pestana"); return LISTAS.includes(p) ? p : "bodega"; } catch { return "bodega"; }
 })();
-const ordenDe = { bodega: "tipo", probados: "fecha" };
+const ordenDe = { bodega: "tipo", probados: "fecha", comprar: "reciente" };
 let orden = ordenDe[pestana];
 const listaDe = (v) => v.lista ?? "bodega";
 const esProbado = (v) => listaDe(v) === "probados";
@@ -42,7 +46,7 @@ const buscandoNotas = new Set();
 // Lista o galería. Se recuerda en este navegador; sin preferencia, galería
 // en pantallas anchas y lista en el móvil.
 let vista = (() => {
-  try { const v = localStorage.getItem("bodega-vista"); if (v === "lista" || v === "galeria") return v; } catch {}
+  try { const v = localStorage.getItem("bodega-vista"); if (v === "lista" || v === "galeria" || v === "calendario") return v; } catch {}
   return window.matchMedia("(min-width: 900px)").matches ? "galeria" : "lista";
 })();
 // Resumen plegado o abierto en el móvil. Se recuerda en este navegador;
@@ -50,17 +54,59 @@ let vista = (() => {
 let resumenAbierto = (() => {
   try { return localStorage.getItem("bodega-resumen") === "abierto"; } catch { return false; }
 })();
+// El calendario de consumo solo existe en la bodega.
+const vistaReal = () => (vista === "calendario" && pestana !== "bodega" ? "lista" : vista);
 let acceso = { rol: "dueno" };
 const soloVer = () => acceso.rol === "lector";
 
-// fijo = true deja el mensaje en pantalla hasta el siguiente toast.
-function toast(msg, fijo = false) {
-  const t = $("#toast");
-  t.textContent = msg;
+const toastEl = $("#toast");
+// Cada panel apunta cuándo se abrió, para saber cuál está encima.
+let turno = 0;
+const showModal = HTMLDialogElement.prototype.showModal;
+HTMLDialogElement.prototype.showModal = function () { this.dataset.turno = ++turno; return showModal.call(this); };
+// Al cerrarse un panel, el aviso que llevaba dentro vuelve a la página.
+for (const d of document.querySelectorAll("dialog")) {
+  d.addEventListener("close", () => { if (toastEl.parentNode === d) document.body.append(toastEl); });
+}
+// Cambia el contenido de la ficha sin perder el aviso que tenga dentro.
+function ponerFicha(html) {
+  const ficha = $("#ficha");
+  const aviso = toastEl.parentNode === ficha ? toastEl : null;
+  ficha.innerHTML = html;
+  if (aviso) ficha.append(aviso);
+}
+
+// fijo = true deja el mensaje en pantalla hasta el siguiente toast. Con
+// acciones ([{ texto, hacer }]) el aviso lleva botones, p. ej. «Deshacer»,
+// y dura un poco más.
+function toast(msg, fijo = false, acciones = []) {
+  const t = toastEl;
+  // Con un panel abierto, el aviso va dentro de él: lo de fuera no se puede tocar.
+  const sitio = [...document.querySelectorAll("dialog[open]")].sort((a, b) => (a.dataset.turno ?? 0) - (b.dataset.turno ?? 0)).at(-1) ?? document.body;
+  if (t.parentNode !== sitio) sitio.append(t);
+  acciones = acciones.filter(Boolean);
+  t.innerHTML = `<span>${esc(msg)}</span>` + acciones.map((a, i) => `<button type="button" data-i="${i}">${esc(a.texto)}</button>`).join("");
+  t.classList.toggle("con-acciones", acciones.length > 0);
+  t.onclick = (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    t.hidden = true;
+    acciones[Number(b.dataset.i)].hacer();
+  };
   t.hidden = false;
   clearTimeout(toast.timer);
-  if (!fijo) toast.timer = setTimeout(() => (t.hidden = true), 4000);
+  if (!fijo) toast.timer = setTimeout(() => (t.hidden = true), acciones.length ? 8000 : 4000);
 }
+
+// Pequeña vibración al cambiar botellas o completar un gesto (donde el
+// teléfono la admite).
+function vibrar(ms = 10) {
+  try { navigator.vibrate?.(ms); } catch { /* sin vibración */ }
+}
+
+// Texto sin mayúsculas, acentos ni signos, para buscar y comparar.
+const plano = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+const claveNombre = (s) => plano(s).replace(/[^a-z0-9]+/g, " ").trim();
 
 function fallo(e) {
   console.error(e);
@@ -91,8 +137,7 @@ function elegirFiltro(f) {
 
 function pasaBusqueda(v) {
   if (!busqueda) return true;
-  const texto = [v.nombre, v.bodega, v.denominacion, v.pais, v.uvas, v.anada, v.notas, v.lugar]
-    .join(" ").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  const texto = plano([v.nombre, v.bodega, v.denominacion, v.pais, v.uvas, v.anada, v.notas, v.lugar, v.ubicacion].join(" "));
   return busqueda.split(/\s+/).every((p) => texto.includes(p));
 }
 
@@ -114,6 +159,7 @@ function comparar(a, b) {
   if (orden === "urgencia") return (URGENCIA[a.estado] ?? 9) - (URGENCIA[b.estado] ?? 9) || a.nombre.localeCompare(b.nombre);
   if (orden === "anada") return (a.anada ?? 9999) - (b.anada ?? 9999) || a.nombre.localeCompare(b.nombre);
   if (orden === "nombre") return a.nombre.localeCompare(b.nombre);
+  if (orden === "reciente") return String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")) || a.nombre.localeCompare(b.nombre);
   if (orden === "fecha") return String(b.fecha_probado ?? "").localeCompare(String(a.fecha_probado ?? ""))
     || String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""));
   if (orden === "mi_nota") return (b.mi_nota ?? -1) - (a.mi_nota ?? -1) || a.nombre.localeCompare(b.nombre);
@@ -191,8 +237,12 @@ const denominacionCorta = (d) => String(d ?? "").replace(/\s*\(.*?\)\s*/g, " ")
 // Números a la española: 8,5 · 24 €. Con precio_url el precio lo ha buscado
 // la app y es aproximado.
 const cifra = (n) => Number(n).toLocaleString("es-ES", { maximumFractionDigits: 1 });
+// En la lista de la compra el enlace es el de la tienda, así que el precio
+// se da por bueno.
 const precioTexto = (v) => (v.precio == null ? ""
-  : `${v.precio_url ? "≈ " : ""}${Number(v.precio).toLocaleString("es-ES", { maximumFractionDigits: 2 })} €`);
+  : `${v.precio_url && listaDe(v) !== "comprar" ? "≈ " : ""}${Number(v.precio).toLocaleString("es-ES", { maximumFractionDigits: 2 })} €`);
+const euros = (n) => `${Math.round(n).toLocaleString("es-ES")} €`;
+const urlWeb = (u) => /^https?:\/\//.test(u ?? "");
 const fechaTexto = (f) => (f ? new Date(`${f}T12:00`).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }) : "");
 // Fecha de hoy en formato AAAA-MM-DD (hora local), para el campo de fecha.
 const hoyIso = () => new Date().toLocaleDateString("sv-SE");
@@ -207,16 +257,19 @@ function miNotaHtml(n) {
 // Marcador de la galería: dos casillas fijas, la mejor nota de las guías
 // (con «+N» si hay más; todas están en la ficha) y la de Vivino, con un
 // guion si falta. Así todas las tarjetas miden igual.
+const casilla = (titulo, val, sub, vacia, title = "") =>
+  `<div class="casilla${vacia ? " vacia" : ""}"${title ? ` title="${esc(title)}"` : ""}><span class="lbl">${titulo}</span><span class="val">${val}</span><span class="sub">${sub}</span></div>`;
+function casillaGuias(guias) {
+  const [mejor, ...resto] = guias;
+  return mejor
+    ? casilla("Guías", `${esc(mejor.nota)}${resto.length ? `<small>+${resto.length}</small>` : ""}`,
+      esc(mejor.guia), false, guias.map((g) => g.texto).join(" · "))
+    : casilla("Guías", "—", "Sin nota", true);
+}
 function marcadorHtml(texto) {
   const { guias, vivino } = leerPuntuacion(texto);
-  const [mejor, ...resto] = guias;
-  const casilla = (titulo, val, sub, vacia, title = "") =>
-    `<div class="casilla${vacia ? " vacia" : ""}"${title ? ` title="${esc(title)}"` : ""}><span class="lbl">${titulo}</span><span class="val">${val}</span><span class="sub">${sub}</span></div>`;
   return `<div class="marcador">
-    ${mejor
-      ? casilla("Guías", `${esc(mejor.nota)}${resto.length ? `<small>+${resto.length}</small>` : ""}`,
-        esc(mejor.guia), false, guias.map((g) => g.texto).join(" · "))
-      : casilla("Guías", "—", "Sin nota", true)}
+    ${casillaGuias(guias)}
     ${vivino
       ? casilla("Vivino", vivino.cifra, `<span class="st" aria-hidden="true">${estrellas(vivino.nota)}</span>`, false, vivino.texto)
       : casilla("Vivino", "—", "Sin nota", true)}
@@ -251,6 +304,7 @@ function lineaHtml(v) {
 
 function filaVino(v) {
   if (esProbado(v)) return filaProbado(v);
+  if (listaDe(v) === "comprar") return filaComprar(v);
   const meta = [v.bodega, v.denominacion, v.pais].filter(Boolean).join(" · ");
   const metaCorta = [v.bodega, denominacionCorta(v.denominacion)].filter(Boolean).join(" · ");
   // En la lista compacta del móvil solo se ve el estado, sin la ventana.
@@ -287,8 +341,6 @@ function filaProbado(v) {
   const donde = [v.lugar, fechaTexto(v.fecha_probado)].filter(Boolean).join(" · ");
   const precio = precioTexto(v);
   const puntos = puntuacionHtml(v.puntuacion) + mejorNotaHtml(v.puntuacion);
-  const casilla = (titulo, val, sub, vacia) =>
-    `<div class="casilla${vacia ? " vacia" : ""}"><span class="lbl">${titulo}</span><span class="val">${val}</span><span class="sub">${sub}</span></div>`;
   return `
     <li class="wine probado" data-id="${v.id}">
       <div class="foto ${esc(v.tipo)}" data-ficha>${imagen(v)}</div>
@@ -312,6 +364,48 @@ function filaProbado(v) {
     </li>`;
 }
 
+// Fila (o tarjeta) de un vino por comprar: el precio en lugar de las botellas.
+function filaComprar(v) {
+  const meta = [v.bodega, v.denominacion, v.pais].filter(Boolean).join(" · ");
+  const metaCorta = [v.bodega, denominacionCorta(v.denominacion)].filter(Boolean).join(" · ");
+  const precio = precioTexto(v);
+  const puntos = puntuacionHtml(v.puntuacion) + mejorNotaHtml(v.puntuacion);
+  return `
+    <li class="wine probado comprar" data-id="${v.id}">
+      <div class="foto ${esc(v.tipo)}" data-ficha>${imagen(v)}</div>
+      <div class="main" data-ficha>
+        <p class="name">${esc(v.nombre)}<span class="anada">${v.anada ?? "s/a"}</span></p>
+        ${meta ? `<p class="meta larga">${esc(meta)}</p>` : ""}
+        ${metaCorta ? `<p class="meta corta">${esc(metaCorta)}</p>` : ""}
+        ${v.uvas ? `<p class="meta uvas">${esc(v.uvas)}</p>` : ""}
+        ${v.estado || puntos ? `<p class="eval">
+          ${v.estado ? `<span class="win ${esc(v.estado)}">${ESTADOS[v.estado]}${v.ventana ? `<span class="w-vent"> · ${esc(v.ventana)}</span>` : ""}</span>` : ""}
+          ${puntos}
+        </p>` : ""}
+      </div>
+      <div class="marcador">
+        ${precio ? casilla("Precio", esc(precio), urlWeb(v.precio_url) ? "en la tienda" : "la botella", false) : casilla("Precio", "—", "Sin precio", true)}
+        ${casillaGuias(leerPuntuacion(v.puntuacion).guias)}
+      </div>
+      <div class="nota-col precio-col" data-ficha><b${precio ? "" : ' class="vacia"'}>${precio ? esc(precio) : "—"}</b></div>
+    </li>`;
+}
+
+// Botellas abiertas de un vino, para su ficha, y cada línea del diario.
+function consumoHtml(c, conNombre = false) {
+  const detalle = [c.ocasion, c.comentario].filter(Boolean).join(" · ");
+  return `<li><button type="button" class="consumo" data-consumo="${c.id}">
+    <span class="cuando">${esc(fechaTexto(c.fecha))}</span>
+    <span class="que">${conNombre ? `<b>${esc(c.nombre)}${c.anada ? ` ${c.anada}` : ""}</b>` : ""}${detalle ? `<span>${esc(detalle)}</span>` : conNombre ? "" : `<span class="vacio-txt">Sin anotar</span>`}</span>
+    ${c.nota != null ? `<span class="nota">${cifra(c.nota)}</span>` : ""}
+  </button></li>`;
+}
+function diarioHtml(v) {
+  const abiertas = consumos.filter((c) => c.vino_id === v.id);
+  if (!abiertas.length) return "";
+  return `<div class="ficha-bloque"><h3>Botellas abiertas</h3><ul class="diario">${abiertas.map((c) => consumoHtml(c)).join("")}</ul></div>`;
+}
+
 // Ficha del vino: panel que sube desde abajo en el móvil y entra por la
 // derecha en el ordenador.
 function pintarFicha() {
@@ -321,7 +415,9 @@ function pintarFicha() {
   const ventana = v.estado ? `${ESTADOS[v.estado]}${v.ventana ? " · " + v.ventana : ""}` : v.ventana;
   const puntos = puntuacionHtml(v.puntuacion);
   if (esProbado(v)) return pintarFichaProbado(v, meta, puntos);
-  $("#ficha").innerHTML = `
+  if (listaDe(v) === "comprar") return pintarFichaComprar(v, meta, puntos);
+  const precio = precioTexto(v);
+  ponerFicha(`
     <div class="ficha-cuerpo">
       <span class="asa" aria-hidden="true"></span>
       <button class="btn ghost icono cerrar" type="button" data-cerrar aria-label="Cerrar"><svg aria-hidden="true"><use href="#i-cerrar"/></svg></button>
@@ -330,8 +426,11 @@ function pintarFicha() {
         <h2 class="ficha-nombre">${esc(v.nombre)}<span class="anada">${v.anada ?? "s/a"}</span></h2>
         ${meta ? `<p class="meta">${esc(meta)}</p>` : ""}
         ${v.uvas ? `<p class="meta uvas">${esc(v.uvas)}</p>` : ""}
+        ${v.ubicacion ? `<p class="meta donde ubic"><svg aria-hidden="true"><use href="#i-pin"/></svg><span>${esc(v.ubicacion)}</span></p>` : ""}
+        ${precio ? `<p class="meta">${esc(precio)} la botella${urlWeb(v.precio_url) ? ` · <a href="${esc(v.precio_url)}" target="_blank" rel="noopener">ver tienda</a>` : ""}</p>` : ""}
         ${ventana || puntos ? `<p class="eval">${ventana ? `<span class="win ${esc(v.estado ?? "")}">${esc(ventana)}</span>` : ""}${puntos}</p>` : ""}
         ${lineaHtml(v)}
+        ${diarioHtml(v)}
         ${notasHtml(v)}
         ${v.cata ? `<div class="ficha-bloque"><h3>Nota de cata</h3><p class="cata">${esc(v.cata)}</p></div>` : ""}
         ${v.notas ? `<div class="ficha-bloque"><h3>Notas</h3><p>${esc(v.notas)}</p></div>` : ""}
@@ -346,13 +445,13 @@ function pintarFicha() {
         <button class="btn ghost editar" type="button" data-editar><svg aria-hidden="true"><use href="#i-editar"/></svg>Editar</button>
         <button class="btn primary abrir" type="button" data-abrir ${v.botellas === 0 ? "disabled" : ""}><svg aria-hidden="true"><use href="#i-copa"/></svg>Abrir una</button>
       </div>
-    </div>`;
+    </div>`);
 }
 
 function pintarFichaProbado(v, meta, puntos) {
   const precio = precioTexto(v);
   const fecha = fechaTexto(v.fecha_probado);
-  $("#ficha").innerHTML = `
+  ponerFicha(`
     <div class="ficha-cuerpo">
       <span class="asa" aria-hidden="true"></span>
       <button class="btn ghost icono cerrar" type="button" data-cerrar aria-label="Cerrar"><svg aria-hidden="true"><use href="#i-cerrar"/></svg></button>
@@ -376,11 +475,44 @@ function pintarFichaProbado(v, meta, puntos) {
         ${v.notas ? `<div class="ficha-bloque"><h3>Notas</h3><p>${esc(v.notas)}</p></div>` : ""}
       </div>
       <div class="ficha-acciones">
+        <button class="btn ghost icono editar" type="button" data-editar aria-label="Editar" title="Editar"><svg aria-hidden="true"><use href="#i-editar"/></svg></button>
+        <span class="sp"></span>
+        <button class="btn ghost pasar" type="button" data-querer><svg aria-hidden="true"><use href="#i-bolsa"/></svg>Lo quiero</button>
+        <button class="btn primary pasar" type="button" data-pasar><svg aria-hidden="true"><use href="#i-bodega"/></svg>A la bodega</button>
+      </div>
+    </div>`);
+}
+
+function pintarFichaComprar(v, meta, puntos) {
+  const precio = precioTexto(v);
+  const ventana = v.estado ? `${ESTADOS[v.estado]}${v.ventana ? " · " + v.ventana : ""}` : v.ventana;
+  ponerFicha(`
+    <div class="ficha-cuerpo">
+      <span class="asa" aria-hidden="true"></span>
+      <button class="btn ghost icono cerrar" type="button" data-cerrar aria-label="Cerrar"><svg aria-hidden="true"><use href="#i-cerrar"/></svg></button>
+      <div class="foto ficha-foto ${esc(v.tipo)}">${imagen(v)}</div>
+      <div class="ficha-texto">
+        <h2 class="ficha-nombre">${esc(v.nombre)}<span class="anada">${v.anada ?? "s/a"}</span></h2>
+        ${meta ? `<p class="meta">${esc(meta)}</p>` : ""}
+        ${v.uvas ? `<p class="meta uvas">${esc(v.uvas)}</p>` : ""}
+        ${ventana || puntos ? `<p class="eval">${ventana ? `<span class="win ${esc(v.estado ?? "")}">${esc(ventana)}</span>` : ""}${puntos}</p>` : ""}
+        <div class="ficha-probado ficha-compra">
+          <span class="precio-grande${precio ? "" : " vacia"}">${precio ? esc(precio) : "—"}</span>
+          <div>
+            <p class="donde">${precio ? "la botella" : "Sin precio"}</p>
+            ${urlWeb(v.precio_url) ? `<p class="meta"><a href="${esc(v.precio_url)}" target="_blank" rel="noopener">Ver en la tienda</a></p>` : ""}
+          </div>
+        </div>
+        ${notasHtml(v)}
+        ${v.cata ? `<div class="ficha-bloque"><h3>Nota de cata</h3><p class="cata">${esc(v.cata)}</p></div>` : ""}
+        ${v.notas ? `<div class="ficha-bloque"><h3>Notas</h3><p>${esc(v.notas)}</p></div>` : ""}
+      </div>
+      <div class="ficha-acciones">
         <button class="btn ghost editar" type="button" data-editar><svg aria-hidden="true"><use href="#i-editar"/></svg>Editar</button>
         <span class="sp"></span>
-        <button class="btn primary pasar" type="button" data-pasar><svg aria-hidden="true"><use href="#i-bodega"/></svg>Añadir a la bodega</button>
+        <button class="btn primary pasar" type="button" data-comprado><svg aria-hidden="true"><use href="#i-bodega"/></svg>Ya lo compré</button>
       </div>
-    </div>`;
+    </div>`);
 }
 
 // Fuentes de las puntuaciones (enlaces) y botón para volver a buscarlas.
@@ -393,7 +525,7 @@ function notasHtml(v) {
     ${fuentes.length ? `<p class="meta">${fuentes.map((f) =>
       `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.fuente)} ${esc(f.nota)}</a>`).join(" · ")}</p>` : ""}
     ${puede ? `<button class="btn ghost" type="button" data-puntuaciones ${buscando ? "disabled" : ""}>${
-      buscando ? "Buscando en la web…" : esProbado(v) ? "Buscar puntuaciones y precio en la web" : "Buscar puntuaciones en la web"}</button>` : ""}
+      buscando ? "Buscando en la web…" : "Buscar puntuaciones y precio en la web"}</button>` : ""}
   </div>`;
 }
 
@@ -415,32 +547,56 @@ async function buscarPuntuaciones(id) {
   }
 }
 
-function abrirFicha(v) {
-  fichaId = v.id;
-  pintarFicha();
+// origen es la foto de la fila que se ha tocado: donde el navegador lo
+// admite, la foto «vuela» de la lista a la ficha.
+function abrirFicha(v, origen = null) {
   const d = $("#ficha");
-  if (!d.open) d.showModal();
-  d.querySelector(".ficha-cuerpo").scrollTop = 0;
-  // El foco va al panel y no al botón de cerrar, para que no salga resaltado.
-  d.focus();
+  const abrir = () => {
+    fichaId = v.id;
+    pintarFicha();
+    if (!d.open) d.showModal();
+    d.querySelector(".ficha-cuerpo").scrollTop = 0;
+    // El foco va al panel y no al botón de cerrar, para que no salga resaltado.
+    d.focus();
+  };
+  if (!origen || d.open || !document.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) return abrir();
+  origen.style.viewTransitionName = "foto-vino";
+  d.classList.add("con-vuelo");
+  const t = document.startViewTransition(() => {
+    origen.style.viewTransitionName = "";
+    abrir();
+    d.querySelector(".ficha-foto").style.viewTransitionName = "foto-vino";
+  });
+  t.finished.finally(() => {
+    d.classList.remove("con-vuelo");
+    const foto = d.querySelector(".ficha-foto");
+    if (foto) foto.style.viewTransitionName = "";
+  });
 }
 
 function render() {
-  const probados = pestana === "probados";
+  const probados = pestana === "probados", comprar = pestana === "comprar", esBodega = pestana === "bodega";
   const actuales = vinos.filter(enPestana);
   const enStock = actuales.filter((v) => v.botellas > 0);
-  // En la bodega se cuentan botellas; en los probados, vinos.
-  const botellas = (lista) => (probados ? lista.length : lista.reduce((s, v) => s + v.botellas, 0));
+  // En la bodega se cuentan botellas; en las otras listas, vinos.
+  const botellas = (lista) => (esBodega ? lista.reduce((s, v) => s + v.botellas, 0) : lista.length);
   const porTipo = TIPOS.map(([t, nombre]) => [t, nombre, botellas(actuales.filter((v) => v.tipo === t))]).filter(([, , n]) => n);
-  const pronto = probados ? 0 : enStock.filter((v) => v.estado === "ya" || v.estado === "urg").length;
+  const pronto = !esBodega ? 0 : enStock.filter((v) => v.estado === "ya" || v.estado === "urg").length;
   const total = botellas(actuales);
   const notas = actuales.filter((v) => v.mi_nota != null).map((v) => Number(v.mi_nota));
   const media = notas.length ? notas.reduce((a, b) => a + b, 0) / notas.length : null;
+  // Lo que costaría la lista de la compra y lo que vale la bodega (precio
+  // por botellas, solo de los vinos que tienen precio).
+  const coste = actuales.reduce((s, v) => s + (Number(v.precio) || 0), 0);
+  const valor = enStock.reduce((s, v) => s + (Number(v.precio) || 0) * v.botellas, 0);
+  const sinPrecio = enStock.filter((v) => v.precio == null).length;
   const resumenBotellas = probados
     ? `${total === 1 ? "vino probado" : "vinos probados"}${media != null ? ` · nota media ${cifra(Math.round(media * 10) / 10)}` : ""}`
+    : comprar ? `${total === 1 ? "vino por comprar" : "vinos por comprar"}${coste ? ` · ${euros(coste)} en total` : ""}`
     : `${total === 1 ? "botella" : "botellas"} · ${enStock.length} ${enStock.length === 1 ? "vino" : "vinos"}`;
   // En el resumen plegado del móvil hay menos sitio.
-  const resumenCorto = probados ? `${total === 1 ? "probado" : "probados"}${media != null ? ` · media ${cifra(Math.round(media * 10) / 10)}` : ""}` : resumenBotellas;
+  const resumenCorto = probados ? `${total === 1 ? "probado" : "probados"}${media != null ? ` · media ${cifra(Math.round(media * 10) / 10)}` : ""}`
+    : comprar ? `por comprar${coste ? ` · ${euros(coste)}` : ""}` : resumenBotellas;
   for (const b of document.querySelectorAll("#pestanas [data-pestana]")) {
     b.querySelector(".num").textContent = vinos.filter((v) => listaDe(v) === b.dataset.pestana).length || "";
   }
@@ -456,33 +612,42 @@ function render() {
       ${porTipo.map(([t, nombre, n]) => `<span class="${t}${filtro === t ? " activo" : ""}" style="flex:${n}" data-tipo="${t}" title="Ver ${nombre.toLowerCase()}"></span>`).join("")}</div>` : ""}
     <ul class="tally${porTipo.some(([t]) => t === filtro) ? " filtrado" : ""}">${porTipo.map(([t, nombre, n]) =>
       `<li><button type="button" class="${t}" data-tipo="${t}" aria-pressed="${filtro === t}" aria-label="Ver ${nombre.toLowerCase()}"><b>${n}</b><span><span class="dot ${t}"></span>${n === 1 ? t : nombre.toLowerCase()}</span></button></li>`).join("")}</ul>
+    ${esBodega && valor ? `<p class="valor"><b>${euros(valor)}</b> de valor aproximado${sinPrecio ? ` · ${sinPrecio} ${sinPrecio === 1 ? "vino" : "vinos"} sin precio` : ""}</p>` : ""}
     ${pronto ? `<button class="alerta" type="button" id="btn-pronto">
       <svg aria-hidden="true"><use href="#i-reloj"/></svg>
       <span class="largo">${pronto === 1 ? "1 vino conviene beberlo" : `${pronto} vinos conviene beberlos`} antes de que acabe ${new Date().getFullYear() + 1}</span>
       <span class="corto">${pronto} para beber pronto</span>
-      <span class="ir">Ver</span></button>` : ""}` : "";
+      <span class="ir">Ver</span></button>` : ""}
+    ${esBodega ? `<div class="atajos">
+      ${enStock.length ? `<button class="atajo principal" type="button" data-atajo="sumiller"><svg aria-hidden="true"><use href="#i-chispa"/></svg>¿Qué abro hoy?</button>` : ""}
+      <button class="atajo" type="button" data-atajo="estadisticas"><svg aria-hidden="true"><use href="#i-grafico"/></svg>Estadísticas</button>
+    </div>` : ""}` : "";
 
   for (const c of document.querySelectorAll("#filtros .chip")) {
     c.querySelector(".num").textContent = actuales.filter((v) => pasaFiltro(v, c.dataset.filter)).length || "";
   }
 
-  $("#vacio").hidden = probados || actuales.length > 0;
+  $("#vacio").hidden = !esBodega || actuales.length > 0;
   $("#vacio-probados").hidden = !probados || actuales.length > 0;
-  $(".controles").hidden = probados && !actuales.length;
+  $("#vacio-comprar").hidden = !comprar || actuales.length > 0;
+  $(".controles").hidden = !esBodega && !actuales.length;
 
   const visibles = actuales.filter((v) => pasaFiltro(v) && pasaBusqueda(v));
-  if (!probados && filtro !== "agotados" && !busqueda) {
+  if (esBodega && filtro !== "agotados" && !busqueda) {
     // Por defecto los agotados van al final de cada grupo.
     visibles.sort((a, b) => (a.botellas === 0) - (b.botellas === 0));
   }
 
+  const vistaAhora = vistaReal();
   let html;
-  if (orden === "tipo") {
+  if (vistaAhora === "calendario") {
+    html = calendarioHtml(visibles);
+  } else if (orden === "tipo") {
     html = TIPOS.map(([t, nombre]) => {
       const grupo = visibles.filter((v) => v.tipo === t);
       if (!grupo.length) return "";
       const n = botellas(grupo);
-      return `<section class="grupo ${t}"><h2>${nombre} <span class="count">${n} ${probados ? (n === 1 ? "vino" : "vinos") : "botellas"}</span></h2>
+      return `<section class="grupo ${t}"><h2>${nombre} <span class="count">${n} ${esBodega ? "botellas" : n === 1 ? "vino" : "vinos"}</span></h2>
         <ol class="ledger">${grupo.map(filaVino).join("")}</ol></section>`;
     }).join("");
   } else {
@@ -490,9 +655,213 @@ function render() {
     html = ordenados.length ? `<section class="grupo"><ol class="ledger">${ordenados.map(filaVino).join("")}</ol></section>` : "";
   }
   $("#lista").innerHTML = html || (actuales.length ? sinResultadosHtml() : "");
-  $("#lista").classList.toggle("galeria", vista === "galeria");
-  for (const b of document.querySelectorAll(".vista")) b.setAttribute("aria-pressed", String(b.dataset.vista === vista));
+  $("#lista").classList.toggle("galeria", vistaAhora === "galeria");
+  $("#lista").classList.toggle("calendario", vistaAhora === "calendario");
+  $(".orden").hidden = vistaAhora === "calendario";
+  for (const b of document.querySelectorAll(".vista")) b.setAttribute("aria-pressed", String(b.dataset.vista === vistaAhora));
   if ($("#ficha").open) pintarFicha();
+  if ($("#dlg-estadisticas").open) pintarEstadisticas();
+}
+
+// ---- Calendario de consumo ----
+// Una fila por vino con su ventana sobre un eje de años común, ordenadas
+// por lo que antes se acaba. El eje va del año pasado a dentro de diez.
+function calendarioHtml(lista) {
+  const ahora = new Date();
+  const ano = ahora.getFullYear();
+  const ini = ano - 1, fin = ano + 10, total = fin - ini;
+  const hoy = ano + (ahora - new Date(ano, 0, 1)) / (365.25 * 864e5);
+  const pos = (x) => `${(((Math.min(fin, Math.max(ini, x)) - ini) / total) * 100).toFixed(2)}%`;
+  const filas = lista.filter((v) => v.botellas > 0).map((v) => ({ v, w: leerVentana(v.ventana) }));
+  const con = filas.filter((f) => f.w).sort((a, b) => (a.w.hasta ?? 9999) - (b.w.hasta ?? 9999)
+    || (a.w.desde ?? 0) - (b.w.desde ?? 0) || a.v.nombre.localeCompare(b.v.nombre));
+  const sin = filas.filter((f) => !f.w).sort((a, b) => a.v.nombre.localeCompare(b.v.nombre));
+  if (!filas.length) return "";
+  const anos = Array.from({ length: total }, (_, i) => ini + i);
+  const nombre = (v) => `<div class="cal-nombre" data-ficha><b>${esc(v.nombre)}</b><span>${v.anada ?? "s/a"} · ×${v.botellas}</span></div>`;
+  const fila = ({ v, w }) => {
+    const desde = w.desde ?? v.anada ?? ini;
+    const hasta = w.hasta ?? fin;
+    const pasada = hasta < ini;
+    const estilo = pasada ? "left:0;width:10px" : `left:${pos(desde)};width:calc(${pos(hasta + 1)} - ${pos(desde)})`;
+    const cuando = v.estado ? `${ESTADOS[v.estado]}${v.ventana ? " · " + v.ventana : ""}` : v.ventana;
+    return `<li class="wine cal-fila" data-id="${v.id}">
+      ${nombre(v)}
+      <div class="cal-pista" data-ficha style="--n:${total}" title="${esc(cuando ?? "")}">
+        <span class="cal-barra ${esc(v.estado ?? "")}${w.hasta == null && !pasada ? " abierta" : ""}${desde < ini && !pasada ? " desde-antes" : ""}" style="${estilo}"></span>
+        <span class="cal-hoy" style="left:${pos(hoy)}"></span>
+        ${pasada ? `<span class="cal-nota">acabó en ${hasta}</span>` : ""}
+      </div>
+    </li>`;
+  };
+  return `<section class="grupo cal">
+    <div class="cal-cab" aria-hidden="true"><span></span><div class="cal-anos">${anos.map((a) => `<span${a === ano ? ' class="este"' : ""}>${String(a).slice(2)}</span>`).join("")}</div></div>
+    <ol class="ledger">${con.map(fila).join("")}</ol>
+    ${sin.length ? `<h2 class="cal-sin">Sin ventana <span class="count">${sin.length} ${sin.length === 1 ? "vino" : "vinos"}</span></h2>
+      <ol class="ledger">${sin.map(({ v }) => `<li class="wine cal-fila sin" data-id="${v.id}">${nombre(v)}</li>`).join("")}</ol>` : ""}
+  </section>`;
+}
+
+// ---- ¿Qué abro hoy? ----
+// Sin Claude (modo demo): tres vinos por urgencia, con una pista del tipo
+// según lo que se va a comer.
+function recomendarLocal(pregunta) {
+  const t = plano(pregunta);
+  const tipo = /carne|cordero|asado|brasa|chulet|caza|guiso|queso/.test(t) ? "tinto"
+    : /pescad|marisc|sushi|ensalada|arroz|liger/.test(t) ? "blanco"
+    : /aperitiv|celebr|brind|fiesta|cumple/.test(t) ? "espumoso" : null;
+  const candidatos = vinos.filter((v) => listaDe(v) === "bodega" && v.botellas > 0 && v.estado !== "guardar")
+    .sort((a, b) => (b.tipo === tipo) - (a.tipo === tipo) || (URGENCIA[a.estado] ?? 2) - (URGENCIA[b.estado] ?? 2));
+  const motivos = { urg: "Su ventana ya ha pasado: mejor abrirlo cuanto antes.", ya: "Conviene beberlo pronto.", punto: "Está en su punto." };
+  return {
+    comentario: "Modo demo: elegidos por urgencia, sin Claude.",
+    recomendaciones: candidatos.slice(0, 3).map((v) => ({ vino_id: v.id, motivo: motivos[v.estado] ?? "Listo para beber.", servicio: "" })),
+  };
+}
+
+function abrirSumiller() {
+  $("#sumiller-res").innerHTML = "";
+  $("#dlg-sumiller").showModal();
+}
+
+async function proponer(e) {
+  e.preventDefault();
+  const pregunta = $("#form-sumiller").elements.pregunta.value.trim();
+  const res = $("#sumiller-res");
+  const boton = $("#btn-proponer");
+  boton.disabled = true;
+  res.innerHTML = `<p class="meta">${store.sumiller ? "Claude está mirando tu bodega… (unos segundos)" : "Pensando…"}</p>`;
+  try {
+    const { comentario, recomendaciones } = store.sumiller ? await store.sumiller.recomendar(pregunta) : recomendarLocal(pregunta);
+    const filas = recomendaciones.map((r) => ({ r, v: vinos.find((x) => x.id === r.vino_id) })).filter((f) => f.v);
+    res.innerHTML = (comentario ? `<p class="rec-comentario">${esc(comentario)}</p>` : "")
+      + (filas.length ? `<ol class="recs">${filas.map(({ r, v }, i) => `<li><button type="button" class="rec" data-id="${v.id}">
+          <span class="foto ${esc(v.tipo)}">${imagen(v)}</span>
+          <span class="rec-txt">
+            <span class="rec-num">${i + 1}</span>
+            <b>${esc(v.nombre)}<span class="anada">${v.anada ?? "s/a"}</span></b>
+            <span class="motivo">${esc(r.motivo)}</span>
+            ${r.servicio ? `<span class="servicio">${esc(r.servicio)}</span>` : ""}
+          </span>
+        </button></li>`).join("")}</ol>` : `<p class="meta">No he encontrado nada que proponer.</p>`);
+  } catch (err) {
+    res.innerHTML = `<p class="meta">No se pudo proponer: ${esc(err.message || err)}</p>`;
+  } finally {
+    boton.disabled = false;
+  }
+}
+
+// ---- Estadísticas ----
+// Suma un peso por clave y devuelve [clave, total] de mayor a menor.
+function sumarPor(lista, claves, peso) {
+  const m = new Map();
+  for (const x of lista) for (const k of [claves(x)].flat()) if (k) m.set(k, (m.get(k) ?? 0) + peso(x));
+  return [...m].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])));
+}
+
+// Uvas de un vino: «Merlot 75 %, Cabernet Sauvignon 25 %» → dos uvas. Se
+// descartan las frases que no son una variedad («12 meses en barrica»).
+function uvasDe(v) {
+  return [...new Set(String(v.uvas ?? "").replace(/\(.*?\)/g, " ").split(/,|·|;|\/|\s+y\s+/)
+    .map((s) => s.replace(/\d+([,.]\d+)?\s*%/g, "").replace(/\s+(mayoritario|con\s|vinificado|y otras|base).*$/i, "").trim())
+    .filter((s) => /^\p{Lu}/u.test(s) && s.length <= 26 && !/^(coupage|otras|crianza)/i.test(s)))];
+}
+
+// Barras horizontales: una por categoría, con su cifra a la derecha.
+function barrasHtml(pares, { max = 8, clase = () => "", unidad = ["botella", "botellas"], otros = true } = {}) {
+  if (!pares.length) return `<p class="meta">Sin datos todavía.</p>`;
+  const vistas = pares.slice(0, max);
+  const resto = pares.slice(max).reduce((s, [, n]) => s + n, 0);
+  if (resto && otros) vistas.push([`Otros (${pares.length - max})`, resto]);
+  const tope = Math.max(...vistas.map(([, n]) => n));
+  return `<ul class="barras">${vistas.map(([k, n]) => `<li title="${esc(k)}: ${n} ${n === 1 ? unidad[0] : unidad[1]}">
+    <span class="lbl">${esc(k)}</span>
+    <span class="pista"><span class="barra ${clase(k)}" style="width:${((n / tope) * 100).toFixed(1)}%"></span></span>
+    <b>${n}</b></li>`).join("")}</ul>`;
+}
+
+// Columnas: una por año o por mes, con la cifra encima.
+function columnasHtml(pares, unidad = ["botella", "botellas"]) {
+  const tope = Math.max(1, ...pares.map(([, n]) => n));
+  return `<div class="columnas" style="--n:${pares.length}">${pares.map(([k, n, titulo]) => `<div class="col" title="${esc(titulo ?? k)}: ${n} ${n === 1 ? unidad[0] : unidad[1]}">
+    <b>${n || ""}</b><span class="barra${n ? "" : " cero"}" style="height:${n ? Math.max(4, (n / tope) * 100).toFixed(1) : 0}%"></span><span class="lbl">${esc(k)}</span></div>`).join("")}</div>`;
+}
+
+function pintarEstadisticas() {
+  const bodega = vinos.filter((v) => listaDe(v) === "bodega" && v.botellas > 0);
+  const nBotellas = bodega.reduce((s, v) => s + v.botellas, 0);
+  const valor = bodega.reduce((s, v) => s + (Number(v.precio) || 0) * v.botellas, 0);
+  const ano = new Date().getFullYear();
+  const esteAno = consumos.filter((c) => String(c.fecha).startsWith(String(ano)));
+  const notas = consumos.filter((c) => c.nota != null).map((c) => Number(c.nota));
+  const media = notas.length ? notas.reduce((a, b) => a + b, 0) / notas.length : null;
+  const dato = (valorTxt, etiqueta) => `<div class="dato"><b>${valorTxt}</b><span>${etiqueta}</span></div>`;
+  const peso = (v) => v.botellas;
+  const nombreTipo = Object.fromEntries(TIPOS);
+  const porTipo = sumarPor(bodega, (v) => v.tipo, peso);
+  // Añadas: una columna por año entre la más vieja y la más joven (con
+  // huecos a cero) si caben; si no, solo los años que hay.
+  const porAnada = new Map(sumarPor(bodega.filter((v) => v.anada), (v) => v.anada, peso));
+  const anos = [...porAnada.keys()].sort((a, b) => a - b);
+  const seguidos = anos.length && anos.at(-1) - anos[0] < 16
+    ? Array.from({ length: anos.at(-1) - anos[0] + 1 }, (_, i) => anos[0] + i) : anos;
+  const sinAnada = bodega.filter((v) => !v.anada).reduce((s, v) => s + v.botellas, 0);
+  // Botellas abiertas en los últimos doce meses.
+  const meses = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(ano, new Date().getMonth() - 11 + i, 1);
+    const clave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return [d.toLocaleDateString("es-ES", { month: "short" }).replace(".", ""), consumos.filter((c) => String(c.fecha).startsWith(clave)).length,
+      d.toLocaleDateString("es-ES", { month: "long", year: "numeric" })];
+  });
+  const bloque = (titulo, cuerpo, nota = "") => `<section class="est-bloque"><h3>${titulo}</h3>${cuerpo}${nota ? `<p class="meta">${nota}</p>` : ""}</section>`;
+  $("#estadisticas").innerHTML = `
+    <div class="datos">
+      ${dato(nBotellas, nBotellas === 1 ? "botella" : "botellas")}
+      ${dato(bodega.length, bodega.length === 1 ? "vino" : "vinos")}
+      ${valor ? dato(euros(valor), "valor aproximado") : ""}
+      ${dato(esteAno.length, `${esteAno.length === 1 ? "abierta" : "abiertas"} en ${ano}`)}
+      ${media != null ? dato(cifra(Math.round(media * 10) / 10), "nota media de lo abierto") : ""}
+    </div>
+    <div class="est-rejilla">
+      ${bloque("Por tipo", barrasHtml(porTipo.map(([t, n]) => [nombreTipo[t] ?? t, n, t]), { clase: (k) => porTipo.find(([t]) => (nombreTipo[t] ?? t) === k)?.[0] ?? "" }))}
+      ${bloque("Cuándo beber", barrasHtml(Object.keys(ESTADOS).map((e) => [ESTADOS[e], bodega.filter((v) => v.estado === e).reduce((s, v) => s + v.botellas, 0)]).filter(([, n]) => n),
+        { clase: (k) => "e-" + Object.keys(ESTADOS).find((e) => ESTADOS[e] === k) }))}
+      ${bloque("Por país", barrasHtml(sumarPor(bodega, (v) => v.pais, peso), { max: 7 }))}
+      ${bloque("Por uva", barrasHtml(sumarPor(bodega, uvasDe, peso), { max: 8, otros: false }), "Las ocho uvas con más botellas. Un vino con varias uvas cuenta en cada una.")}
+    </div>
+    ${bloque("Por añada", seguidos.length ? columnasHtml(seguidos.map((a) => [`'${String(a).slice(2)}`, porAnada.get(a) ?? 0, String(a)])) : `<p class="meta">Sin datos todavía.</p>`,
+      sinAnada ? `Además, ${sinAnada} ${sinAnada === 1 ? "botella" : "botellas"} sin añada.` : "")}
+    ${bloque("Botellas abiertas, últimos 12 meses", consumos.length ? columnasHtml(meses, ["botella abierta", "botellas abiertas"])
+      : `<p class="meta">Todavía no has abierto ninguna botella desde la app. Cada vez que pulses «−» o «Abrir una» se apunta aquí.</p>`)}
+    ${consumos.length ? bloque("Diario", `<ul class="diario">${consumos.slice(0, 30).map((c) => consumoHtml(c, true)).join("")}</ul>`,
+      consumos.length > 30 ? `Se ven las 30 últimas de ${consumos.length}.` : "") : ""}`;
+}
+
+function abrirEstadisticas() {
+  pintarEstadisticas();
+  $("#dlg-estadisticas").showModal();
+}
+
+function enlazarSumillerYEstadisticas() {
+  $("#btn-menu-sumiller").addEventListener("click", abrirSumiller);
+  $("#btn-menu-estadisticas").addEventListener("click", abrirEstadisticas);
+  $("#form-sumiller").addEventListener("submit", proponer);
+  $("#btn-cerrar-sumiller").addEventListener("click", () => $("#dlg-sumiller").close());
+  $("#sumiller-ideas").addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip");
+    if (!chip) return;
+    $("#form-sumiller").elements.pregunta.value = chip.textContent;
+    $("#form-sumiller").requestSubmit();
+  });
+  $("#sumiller-res").addEventListener("click", (e) => {
+    const v = vinos.find((x) => x.id === e.target.closest(".rec")?.dataset.id);
+    if (v) abrirFicha(v);
+  });
+  $("#btn-cerrar-estadisticas").addEventListener("click", () => $("#dlg-estadisticas").close());
+  $("#estadisticas").addEventListener("click", (e) => {
+    const c = consumos.find((x) => x.id === e.target.closest("[data-consumo]")?.dataset.consumo);
+    if (c) abrirConsumo(c);
+  });
 }
 
 // Aviso cuando ningún vino pasa el filtro y la búsqueda, con lo que se
@@ -506,7 +875,7 @@ function sinResultadosHtml() {
   const texto = $("#buscar").value.trim();
   const base = SIN_FILTRO[filtro] ?? "Ningún vino";
   const titulo = texto ? `${base} con «${esc(texto)}»` : base;
-  const consejo = texto && filtro !== "todo" ? `Prueba con otra palabra o busca en ${pestana === "probados" ? "todos los probados" : "toda la bodega"}.`
+  const consejo = texto && filtro !== "todo" ? `Prueba con otra palabra o busca en ${pestana === "probados" ? "todos los probados" : pestana === "comprar" ? "toda la lista" : "toda la bodega"}.`
     : texto ? "Prueba con otra palabra: el nombre, la bodega, la uva o el país." : "Elige otro filtro para ver el resto.";
   return `<div class="sin-resultados">
     <span class="ico" aria-hidden="true"><svg><use href="#i-buscar"/></svg></span>
@@ -763,8 +1132,10 @@ function abrirDialogo(vino) {
   const lista = vino ? listaDe(vino) : pestana;
   const f = $("#form-vino");
   f.reset();
-  $("#dlg-titulo").textContent = vino ? "Editar vino" : lista === "probados" ? "Nuevo vino probado" : "Nuevo vino";
+  $("#dlg-titulo").textContent = vino ? "Editar vino" : lista === "probados" ? "Nuevo vino probado" : lista === "comprar" ? "Nuevo vino por comprar" : "Nuevo vino";
   $("#btn-borrar").hidden = !vino;
+  $("#lista-ubicaciones").innerHTML = [...new Set(vinos.map((x) => x.ubicacion).filter(Boolean))].sort()
+    .map((u) => `<option value="${esc(u)}">`).join("");
   if (vino) for (const n of nombresCampos(f)) f.elements[n].value = vino[n] ?? "";
   else f.elements.fecha_probado.value = hoyIso();
   fotoNueva = null;
@@ -781,7 +1152,7 @@ function abrirDialogo(vino) {
   for (const el of f.elements) {
     if (!el.name) continue;
     const solo = el.closest("[data-solo]")?.dataset.solo;
-    el.disabled = soloVer() || (solo != null && solo !== lista);
+    el.disabled = soloVer() || (solo != null && !solo.split(" ").includes(lista));
   }
   ponerNota(vino?.mi_nota);
   $("#btn-guardar").hidden = soloVer();
@@ -837,10 +1208,11 @@ async function leerEtiqueta(file) {
     }
     estadoPrevio = f.elements.estado.value;
     resumirSecciones();
-    estado.textContent = (pestana === "probados"
-      ? "Revisa los datos, pon tu nota y dónde lo has probado. Al guardar, la app busca sus puntuaciones y el precio en la web."
-      : "Revisa los datos antes de guardar. La cata, la ventana y cuándo beber son sugerencias de Claude. Al guardar, la app busca sus puntuaciones en la web.")
-      + (aviso ? " Ojo: " + aviso : "");
+    const repe = pestana === "bodega" && buscarDuplicado(leerFormulario());
+    const consejo = repe ? `Ya tienes este vino (${botellasTexto(repe.botellas)}). Al guardar podrás sumar botellas en vez de crear otro.`
+      : pestana === "probados" ? "Revisa los datos, pon tu nota y dónde lo has probado. Al guardar, la app busca sus puntuaciones y el precio en la web."
+      : "Revisa los datos antes de guardar. La cata, la ventana y cuándo beber son sugerencias de Claude. Al guardar, la app busca sus puntuaciones en la web.";
+    estado.textContent = consejo + (aviso ? " Ojo: " + aviso : "");
   } catch (err) {
     estado.textContent = "No se pudo leer: " + (err.message || err);
   } finally {
@@ -861,19 +1233,61 @@ function leerFormulario() {
   return datos;
 }
 
+const botellasTexto = (n) => `${n} ${n === 1 ? "botella" : "botellas"}`;
+
+// Vino de la bodega con el mismo nombre y añada (y la misma bodega, si los
+// dos la dicen) que el que se va a añadir.
+function buscarDuplicado(datos) {
+  const nombre = claveNombre(datos.nombre);
+  if (!nombre) return null;
+  return vinos.find((v) => listaDe(v) === "bodega" && claveNombre(v.nombre) === nombre
+    && (v.anada ?? null) === (datos.anada ?? null)
+    && (!v.bodega || !datos.bodega || claveNombre(v.bodega) === claveNombre(datos.bodega))) ?? null;
+}
+
+// Pregunta qué hacer con un vino repetido: "sumar", "crear" o "cancelar".
+function preguntarDuplicado(existente, botellas) {
+  const d = $("#dlg-duplicado");
+  $("#dup-texto").textContent = `«${existente.nombre}»${existente.anada ? " " + existente.anada : ""} ya está en tu bodega con ${botellasTexto(existente.botellas)}. `
+    + `¿Sumo ${botellasTexto(botellas)} a ese vino o creo otro aparte?`;
+  $("#dup-sumar").textContent = botellas === 1 ? "Sumar 1 botella" : `Sumar ${botellas} botellas`;
+  d.returnValue = "cancelar";
+  d.showModal();
+  return new Promise((ok) => d.addEventListener("close", () => ok(d.returnValue || "cancelar"), { once: true }));
+}
+
 async function guardar(e) {
   e.preventDefault();
   const datos = leerFormulario();
+  if (!editando && pestana === "bodega") {
+    const repe = buscarDuplicado(datos);
+    if (repe) {
+      const sumar = Math.max(1, datos.botellas);
+      const respuesta = await preguntarDuplicado(repe, sumar);
+      if (respuesta === "cancelar") return;
+      if (respuesta === "sumar") {
+        try {
+          const v = await store.actualizar(repe.id, { botellas: repe.botellas + sumar });
+          vinos = vinos.map((x) => (x.id === v.id ? v : x));
+          $("#dlg").close();
+          render();
+          toast(`«${v.nombre}»: ahora tienes ${botellasTexto(v.botellas)}`);
+        } catch (err) { fallo(err); }
+        return;
+      }
+    }
+  }
   // Un precio cambiado a mano deja de ser el aproximado que buscó la app.
-  if (editando && "precio" in datos && datos.precio !== (editando.precio == null ? null : Number(editando.precio))) datos.precio_url = null;
+  // En la lista de la compra el enlace lo escribe Luis y se respeta.
+  if (editando && !("precio_url" in datos) && datos.precio !== (editando.precio == null ? null : Number(editando.precio))) datos.precio_url = null;
   try {
     if (editando) {
       const v = await store.actualizar(editando.id, datos);
       vinos = vinos.map((x) => (x.id === v.id ? v : x));
     } else {
-      // La lista solo se manda en los probados: en la bodega vale la de por defecto.
-      if (pestana === "probados") datos.lista = "probados";
-      else datos.estado = estadoSegunVentana(datos.ventana) ?? datos.estado;
+      // La lista solo se manda si no es la bodega, que es la de por defecto.
+      if (pestana !== "bodega") datos.lista = pestana;
+      if (pestana !== "probados") datos.estado = estadoSegunVentana(datos.ventana) ?? datos.estado;
       const nuevo = await store.crear(datos);
       vinos.push(nuevo);
       const foto = fotoNueva;
@@ -885,12 +1299,13 @@ async function guardar(e) {
     }
     $("#dlg").close();
     render();
-    toast(editando ? "Guardado" : pestana === "probados" ? "Vino probado añadido" : "Vino añadido");
+    toast(editando ? "Guardado" : pestana === "probados" ? "Vino probado añadido" : pestana === "comprar" ? "Apuntado en tu lista de la compra" : "Vino añadido");
   } catch (err) { fallo(err); }
 }
 
 async function borrar() {
   const pregunta = esProbado(editando ?? {}) ? `¿Borrar «${editando?.nombre}» de tus vinos probados?`
+    : listaDe(editando ?? {}) === "comprar" ? `¿Borrar «${editando?.nombre}» de tu lista de la compra?`
     : `¿Borrar «${editando?.nombre}»? Si solo te lo has bebido, mejor deja las botellas a 0.`;
   if (!editando || !confirm(pregunta)) return;
   try {
@@ -909,6 +1324,7 @@ async function cambiarBotellas(id, delta) {
   if (nuevo === v.botellas) return false;
   const antes = v.botellas;
   v.botellas = nuevo;
+  vibrar();
   render();
   for (const n of document.querySelectorAll(`.wine[data-id="${CSS.escape(String(id))}"] .n, #ficha[open] .n`)) n.classList.add("cambio");
   try {
@@ -922,12 +1338,158 @@ async function cambiarBotellas(id, delta) {
   }
 }
 
+// Abre una botella: resta una y avisa, con «Deshacer» por si fue un toque
+// sin querer.
+async function abrirBotella(id) {
+  const v = vinos.find((x) => x.id === id);
+  if (!v || !(await cambiarBotellas(id, -1))) return;
+  // Se apunta en el diario con la fecha de hoy; la ocasión y la nota se
+  // pueden añadir con «Anotar» o más tarde desde la ficha.
+  let c = null;
+  if (store.consumos) {
+    try {
+      c = await store.consumos.crear({ vino_id: id, nombre: v.nombre, anada: v.anada ?? null, tipo: v.tipo, fecha: hoyIso() });
+      consumos.unshift(c);
+      render();
+    } catch (err) { console.warn("No se pudo apuntar en el diario", err); }
+  }
+  toast(v.botellas ? `Salud. ${v.botellas === 1 ? "Queda 1 botella" : `Quedan ${v.botellas} botellas`}` : "Salud. Era la última botella", false, [
+    c && { texto: "Anotar", hacer: () => abrirConsumo(c) },
+    { texto: "Deshacer", hacer: async () => {
+      if (!(await cambiarBotellas(id, 1))) return;
+      if (c) {
+        try { await store.consumos.borrar(c.id); } catch (err) { console.warn(err); }
+        consumos = consumos.filter((x) => x.id !== c.id);
+        render();
+      }
+      toast("Deshecho: la botella vuelve a la bodega");
+    } },
+  ]);
+}
+
+// ---- Diario de botellas abiertas ----
+let consumoEditando = null;
+function abrirConsumo(c) {
+  if (soloVer()) return;
+  consumoEditando = c;
+  const f = $("#form-consumo");
+  f.reset();
+  for (const k of ["fecha", "nota", "ocasion", "comentario"]) f.elements[k].value = c[k] ?? "";
+  $("#consumo-vino").textContent = `${c.nombre}${c.anada ? " " + c.anada : ""}`;
+  $("#dlg-consumo").showModal();
+}
+
+async function guardarConsumo(e) {
+  e.preventDefault();
+  const f = $("#form-consumo");
+  const datos = {
+    fecha: f.elements.fecha.value || hoyIso(),
+    nota: f.elements.nota.value === "" ? null : Math.min(10, Math.max(0, Number(f.elements.nota.value))),
+    ocasion: f.elements.ocasion.value.trim() || null,
+    comentario: f.elements.comentario.value.trim() || null,
+  };
+  try {
+    const c = await store.consumos.actualizar(consumoEditando.id, datos);
+    consumos = consumos.map((x) => (x.id === c.id ? c : x))
+      .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)) || String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
+    $("#dlg-consumo").close();
+    render();
+    toast("Anotado en el diario");
+  } catch (err) { fallo(err); }
+}
+
+async function borrarConsumo() {
+  const c = consumoEditando;
+  if (!c || !confirm("¿Quitar esta botella del diario? El número de botellas no cambia.")) return;
+  try {
+    await store.consumos.borrar(c.id);
+    consumos = consumos.filter((x) => x.id !== c.id);
+    $("#dlg-consumo").close();
+    render();
+    toast("Quitada del diario");
+  } catch (err) { fallo(err); }
+}
+
+// Busca en tiendas el precio de los vinos de la bodega que no lo tienen.
+async function buscarPrecios() {
+  const pendientes = vinos.filter((v) => listaDe(v) === "bodega" && v.botellas > 0 && v.precio == null);
+  if (!pendientes.length) return toast("Todos tus vinos tienen precio");
+  if (!confirm(`Voy a buscar en tiendas el precio de ${pendientes.length} ${pendientes.length === 1 ? "vino" : "vinos"}. Tarda cerca de medio minuto por vino y gasta un poco de tu saldo de Claude. ¿Empiezo?`)) return;
+  let hechos = 0, fallos = 0;
+  for (const [i, v] of pendientes.entries()) {
+    toast(`Buscando precios… ${i + 1} de ${pendientes.length} · ${hechos} encontrados`, true);
+    try {
+      const { vino, precio } = await store.puntuaciones.buscar(v.id, "precio");
+      vinos = vinos.map((x) => (x.id === vino.id ? vino : x));
+      if (precio) hechos++;
+      render();
+    } catch (err) {
+      fallos++;
+      // Si los tres primeros fallan, el problema es de configuración: parar y enseñarlo.
+      if (!hechos && fallos === 3) {
+        toast("No se pudieron buscar los precios");
+        return avisar("No se pudieron buscar los precios. Error: " + (err.message || err));
+      }
+    }
+  }
+  toast(`${hechos} ${hechos === 1 ? "precio encontrado" : "precios encontrados"}` + (pendientes.length - hechos ? `, ${pendientes.length - hechos} sin encontrar` : ""));
+}
+
+// Gestos en la lista del móvil: deslizar una fila a la izquierda abre una
+// botella y a la derecha abre el formulario para editar.
+function enlazarGestos() {
+  const lista = $("#lista");
+  const UMBRAL = 84, TOPE = 128;
+  let g = null;
+  lista.addEventListener("touchstart", (e) => {
+    g = null;
+    if (vistaReal() !== "lista" || soloVer() || e.touches.length !== 1) return;
+    const fila = e.target.closest(".wine");
+    if (!fila || e.target.closest(".stock")) return;
+    const v = vinos.find((x) => x.id === fila.dataset.id);
+    if (!v) return;
+    g = { fila, v, x: e.touches[0].clientX, y: e.touches[0].clientY, dx: 0, activo: false, listo: false,
+      puedeAbrir: !esProbado(v) && listaDe(v) === "bodega" && v.botellas > 0 };
+  }, { passive: true });
+  lista.addEventListener("touchmove", (e) => {
+    if (!g) return;
+    const dx = e.touches[0].clientX - g.x, dy = e.touches[0].clientY - g.y;
+    if (!g.activo) {
+      if (Math.abs(dy) > 10 && Math.abs(dy) >= Math.abs(dx)) { g = null; return; }
+      if (Math.abs(dx) < 14 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      g.activo = true;
+      g.fila.classList.add("deslizando");
+      g.fila.classList.toggle("sin-abrir", !g.puedeAbrir);
+    }
+    // Sin botellas no se puede deslizar hacia «Abrir una».
+    g.dx = Math.max(g.puedeAbrir ? -TOPE : 0, Math.min(TOPE, dx));
+    const listo = Math.abs(g.dx) >= UMBRAL;
+    if (listo && !g.listo) vibrar(8);
+    g.listo = listo;
+    g.fila.classList.toggle("listo", listo);
+    g.fila.style.transform = `translateX(${g.dx}px)`;
+  }, { passive: true });
+  const soltar = () => {
+    if (!g) return;
+    const { fila, v, dx, activo, listo } = g;
+    g = null;
+    if (!activo) return;
+    fila.classList.add("volviendo");
+    fila.style.transform = "";
+    setTimeout(() => fila.classList.remove("deslizando", "volviendo", "listo", "sin-abrir"), 260);
+    if (!listo) return;
+    if (dx < 0) abrirBotella(v.id);
+    else abrirDialogo(v);
+  };
+  lista.addEventListener("touchend", soltar);
+  lista.addEventListener("touchcancel", () => { if (g) { g.listo = false; soltar(); } });
+}
+
 // Copia un vino probado a la bodega con una botella y abre el formulario
 // para ajustar botellas y ventana. El probado se queda como estaba. La foto
 // se copia aparte para que cada vino tenga la suya.
 async function anadirABodega(v) {
-  const campos = ["nombre", "bodega", "denominacion", "pais", "tipo", "uvas", "anada", "puntuacion", "cata", "notas"];
-  const datos = Object.fromEntries(campos.map((k) => [k, v[k] ?? null]));
+  const datos = copiaDe(v);
   try {
     const nuevo = await store.crear({ ...datos, botellas: 1 });
     vinos.push(nuevo);
@@ -938,6 +1500,66 @@ async function anadirABodega(v) {
     cambiarPestana("bodega");
     toast(`«${v.nombre}» está en tu bodega con 1 botella`);
     abrirDialogo(nuevo);
+  } catch (err) { fallo(err); }
+}
+
+// Datos de un vino para copiarlo a otra lista.
+function copiaDe(v) {
+  const campos = ["nombre", "bodega", "denominacion", "pais", "tipo", "uvas", "anada", "puntuacion", "cata", "notas", "precio", "precio_url"];
+  return Object.fromEntries(campos.map((k) => [k, v[k] ?? null]));
+}
+
+// Apunta un vino probado en la lista de la compra.
+async function quererVino(v) {
+  const nombre = claveNombre(v.nombre);
+  if (vinos.some((x) => listaDe(x) === "comprar" && claveNombre(x.nombre) === nombre && (x.anada ?? null) === (v.anada ?? null))) {
+    return toast("Ya está en tu lista de la compra");
+  }
+  try {
+    const nuevo = await store.crear({ ...copiaDe(v), botellas: 0, lista: "comprar" });
+    vinos.push(nuevo);
+    if (store.fotos && v.imagen_url) {
+      store.fotos.guardar(nuevo.id, v.imagen_url).then((url) => { ponerFoto(nuevo.id, url); render(); }).catch(() => {});
+    }
+    render();
+    toast(`«${v.nombre}» apuntado para comprar`, false, [
+      { texto: "Ver lista", hacer: () => { $("#ficha").close(); cambiarPestana("comprar"); } },
+    ]);
+  } catch (err) { fallo(err); }
+}
+
+// Pasa un vino de la lista de la compra a la bodega con una botella y abre
+// el formulario para ajustar botellas, sitio y ventana. Si ya estaba en la
+// bodega, ofrece sumarle la botella.
+async function yaComprado(v) {
+  try {
+    const repe = buscarDuplicado(v);
+    const respuesta = repe ? await preguntarDuplicado(repe, 1) : "crear";
+    if (respuesta === "cancelar") return;
+    $("#ficha").close();
+    if (respuesta === "sumar") {
+      const sumado = await store.actualizar(repe.id, { botellas: repe.botellas + 1 });
+      await store.borrar(v.id);
+      vinos = vinos.filter((x) => x.id !== v.id).map((x) => (x.id === sumado.id ? sumado : x));
+      cambiarPestana("bodega");
+      render();
+      return toast(`«${sumado.nombre}»: ahora tienes ${botellasTexto(sumado.botellas)}`);
+    }
+    const nuevo = await store.actualizar(v.id, { lista: "bodega", botellas: 1 });
+    vinos = vinos.map((x) => (x.id === nuevo.id ? nuevo : x));
+    cambiarPestana("bodega");
+    render();
+    toast(`«${nuevo.nombre}» está en tu bodega con 1 botella`);
+    abrirDialogo(nuevo);
+  } catch (err) { fallo(err); }
+}
+
+async function cargarComprar() {
+  try {
+    const datos = (await comprarIniciales()).map((v) => ({ ...v, botellas: 0, lista: "comprar" }));
+    vinos.push(...(await store.crearVarios(datos)));
+    render();
+    toast("Las 8 sugerencias están en tu lista");
   } catch (err) { fallo(err); }
 }
 
@@ -960,9 +1582,10 @@ function pintarPestana() {
   document.body.dataset.lista = pestana;
   for (const b of document.querySelectorAll("#pestanas [data-pestana]")) b.setAttribute("aria-selected", String(b.dataset.pestana === pestana));
   $("#orden").innerHTML = ORDENES[pestana].map(([v, t]) => `<option value="${v}"${v === orden ? " selected" : ""}>${t}</option>`).join("");
-  const anadir = probados ? "Añadir vino probado" : "Añadir vino";
+  const comprar = pestana === "comprar";
+  const anadir = probados ? "Añadir vino probado" : comprar ? "Añadir vino por comprar" : "Añadir vino";
   $("#btn-nuevo").setAttribute("aria-label", anadir);
-  $("#btn-nuevo .txt").textContent = probados ? "Añadir probado" : "Añadir vino";
+  $("#btn-nuevo .txt").textContent = probados ? "Añadir probado" : comprar ? "Añadir a la lista" : "Añadir vino";
   $("#btn-fab").setAttribute("aria-label", anadir);
   $("#buscar").placeholder = probados ? "Buscar por vino, bodega, uva, sitio…" : "Buscar por vino, bodega, uva, país…";
 }
@@ -1094,6 +1717,9 @@ async function mostrar(usuario) {
   $("#btn-subir-foto").hidden = !store.fotos?.propia;
   $("#btn-importar").hidden = soloVer();
   $("#btn-cargar-iniciales").hidden = ajena;
+  $("#btn-cargar-comprar").hidden = soloVer();
+  $("#btn-primer-comprar").hidden = soloVer();
+  $("#btn-precios").hidden = !store.puntuaciones || soloVer();
   // Cada sección del menú ⋯ se oculta si no le queda ninguna opción.
   for (const sec of document.querySelectorAll(".menu-sec")) sec.hidden = ![...sec.querySelectorAll("button")].some((b) => !b.hidden);
   try {
@@ -1105,6 +1731,13 @@ async function mostrar(usuario) {
     aviso.hidden = false;
     $("#app").hidden = true;
     return;
+  }
+  // El diario es opcional: sin la tabla consumos la app sigue funcionando.
+  try {
+    consumos = store.consumos ? await store.consumos.listar() : [];
+  } catch (err) {
+    console.warn("Sin diario de botellas abiertas", err);
+    consumos = [];
   }
   render();
 }
@@ -1127,6 +1760,8 @@ function enlazar() {
       try { localStorage.setItem("bodega-resumen", resumenAbierto ? "abierto" : "plegado"); } catch {}
       return render();
     }
+    const atajo = e.target.closest("[data-atajo]")?.dataset.atajo;
+    if (atajo) return atajo === "sumiller" ? abrirSumiller() : abrirEstadisticas();
     const tipo = e.target.closest("[data-tipo]")?.dataset.tipo;
     if (tipo) elegirFiltro(filtro === tipo ? "todo" : tipo);
     else if (e.target.closest("#btn-pronto")) elegirFiltro("ya");
@@ -1154,9 +1789,10 @@ function enlazar() {
     const fila = e.target.closest(".wine");
     if (!fila) return;
     const paso = e.target.closest(".step");
-    if (paso) return cambiarBotellas(fila.dataset.id, Number(paso.dataset.delta));
-    if (e.target.closest("[data-ficha]")) abrirFicha(vinos.find((v) => v.id === fila.dataset.id));
+    if (paso) return paso.dataset.delta === "-1" ? abrirBotella(fila.dataset.id) : cambiarBotellas(fila.dataset.id, 1);
+    if (e.target.closest("[data-ficha]")) abrirFicha(vinos.find((v) => v.id === fila.dataset.id), fila.querySelector(".foto"));
   });
+  enlazarGestos();
 
   $(".vistas").addEventListener("click", (e) => {
     const b = e.target.closest(".vista");
@@ -1175,15 +1811,23 @@ function enlazar() {
     if (!v) return;
     if (e.target.closest("[data-cerrar]")) return ficha.close();
     const paso = e.target.closest(".step");
-    if (paso) return cambiarBotellas(v.id, Number(paso.dataset.delta));
-    if (e.target.closest("[data-abrir]")) {
-      if (!(await cambiarBotellas(v.id, -1))) return;
-      return toast(v.botellas ? `Salud. ${v.botellas === 1 ? "Queda 1 botella" : `Quedan ${v.botellas} botellas`}` : "Salud. Era la última botella");
-    }
+    if (paso) return paso.dataset.delta === "-1" ? abrirBotella(v.id) : cambiarBotellas(v.id, 1);
+    if (e.target.closest("[data-abrir]")) return abrirBotella(v.id);
     if (e.target.closest("[data-editar]")) { ficha.close(); abrirDialogo(v); }
     if (e.target.closest("[data-puntuaciones]")) buscarPuntuaciones(v.id);
     if (e.target.closest("[data-pasar]")) anadirABodega(v);
+    if (e.target.closest("[data-querer]")) quererVino(v);
+    if (e.target.closest("[data-comprado]")) yaComprado(v);
+    const linea = e.target.closest("[data-consumo]");
+    if (linea) { const c = consumos.find((x) => x.id === linea.dataset.consumo); if (c) abrirConsumo(c); }
   });
+  enlazarSumillerYEstadisticas();
+  $("#form-consumo").addEventListener("submit", guardarConsumo);
+  $("#btn-cancelar-consumo").addEventListener("click", () => $("#dlg-consumo").close());
+  $("#btn-borrar-consumo").addEventListener("click", borrarConsumo);
+  $("#btn-primer-comprar").addEventListener("click", () => abrirDialogo(null));
+  $("#btn-cargar-comprar").addEventListener("click", cargarComprar);
+  $("#btn-precios").addEventListener("click", buscarPrecios);
   ficha.addEventListener("close", () => { fichaId = null; });
   // En el móvil, arrastrar el panel hacia abajo lo cierra.
   let arrastre = null;
