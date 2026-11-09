@@ -790,3 +790,111 @@ dialog.ficha.con-vuelo[open], dialog.ficha.con-vuelo[open]::backdrop { animation
 }
 .solo-ver .consumo { cursor: default; }
 #dlg-consumo { width: min(480px, calc(100vw - 24px)); }
+
+/* ---- Atajos del resumen, «¿Qué abro hoy?», estadísticas y calendario ---- */
+.atajos { display: flex; flex-wrap: wrap; gap: 8px; }
+.atajo {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  font: 600 13.5px/1 var(--font-ui); color: var(--ink); background: var(--surface);
+  border: 1px solid transparent; border-radius: 999px; padding: 9px 14px;
+}
+.atajo svg { width: 16px; height: 16px; color: var(--muted); }
+.atajo.principal { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.atajo.principal svg { color: var(--accent); }
+.atajo:hover { border-color: var(--rule); }
+.atajo:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+#dlg-sumiller { width: min(560px, calc(100vw - 24px)); }
+.ideas { display: flex; flex-wrap: wrap; gap: 6px; }
+#sumiller-res:empty { display: none; }
+#sumiller-res { display: grid; gap: 10px; }
+#sumiller-res p { margin: 0; }
+.rec-comentario { font: italic 17px/1.45 var(--font-display); }
+.recs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rec {
+  display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 12px; align-items: center; width: 100%; text-align: left; cursor: pointer;
+  font: inherit; color: inherit; background: var(--surface); border: 1px solid transparent; border-radius: 16px; padding: 8px 12px 8px 8px;
+}
+.rec:hover { border-color: var(--rule); }
+.rec:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rec .foto { width: 48px; height: 84px; border-radius: 10px; }
+.rec .foto .botella { width: 28px; height: 76px; }
+.rec-txt { display: grid; gap: 2px; min-width: 0; position: relative; padding-right: 30px; }
+.rec-txt b { font: 500 18px/1.2 var(--font-display); }
+.rec-txt .anada { font: 500 13px var(--font-ui); color: var(--muted); margin-left: 7px; }
+.rec-txt .motivo { font-size: 14px; }
+.rec-txt .servicio { font-size: 12.5px; color: var(--muted); }
+.rec-num {
+  position: absolute; top: 0; right: 0; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  font: 600 12px var(--font-ui); color: var(--accent); border: 1.5px solid var(--accent);
+}
+
+#dlg-estadisticas { width: min(860px, calc(100vw - 24px)); }
+.estadisticas { gap: 18px; }
+.est-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; position: sticky; top: 0; z-index: 1; background: var(--raised); margin: -20px -20px 0; padding: 14px 20px 10px; }
+#estadisticas { display: grid; gap: 22px; grid-template-columns: minmax(0, 1fr); }
+.datos { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.dato { display: grid; gap: 2px; background: var(--surface); border-radius: 14px; padding: 12px 14px; }
+.dato b { font: 500 28px/1.05 var(--font-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dato span { font-size: 12.5px; color: var(--muted); }
+.est-rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 22px 28px; }
+.est-bloque { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.est-bloque h3 { margin: 0; font: 600 11.5px var(--font-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.est-bloque .meta { font-size: 12.5px; }
+.barras { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.barras li { display: grid; grid-template-columns: minmax(0, 9.5em) minmax(0, 1fr) 2.4ch; gap: 10px; align-items: center; font-size: 13.5px; }
+.barras .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barras .pista { height: 10px; display: block; }
+.barras .barra { display: block; height: 100%; min-width: 4px; border-radius: 0 4px 4px 0; background: var(--c, var(--accent)); }
+.barras b { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.barras li:hover .barra, .columnas .col:hover .barra { filter: brightness(1.15); }
+.barra.e-urg { --c: var(--urg); }
+.barra.e-ya { --c: var(--ya); }
+.barra.e-punto { --c: var(--punto); }
+.barra.e-guardar { --c: var(--guardar); }
+.columnas { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 2px; height: 150px; border-bottom: 1px solid var(--rule); padding-bottom: 20px; position: relative; }
+.columnas .col { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 3px; min-width: 0; position: relative; }
+.columnas .barra { width: min(22px, 70%); border-radius: 4px 4px 0 0; background: var(--accent); flex: none; }
+.columnas .barra.cero { height: 0; }
+.columnas b { font: 600 11.5px var(--font-ui); font-variant-numeric: tabular-nums; }
+.columnas .lbl { position: absolute; top: calc(100% + 4px); font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Calendario de consumo. */
+.cal { --col: minmax(0, 15em); gap: 6px; }
+.cal-cab { display: grid; grid-template-columns: var(--col) minmax(0, 1fr); gap: 14px; padding: 0 12px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 112px); z-index: 2; }
+.cal-anos { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; background: var(--paper); padding: 4px 0; border-radius: 6px; }
+.cal-anos span { padding-left: 3px; border-left: 1px solid var(--rule); }
+.cal-anos .este { color: var(--ink); font-weight: 700; }
+#lista.calendario .cal .ledger { gap: 4px; }
+#lista.calendario .wine.cal-fila { display: grid; grid-template-columns: var(--col) minmax(0, 1fr); gap: 14px; align-items: center; padding: 8px 12px; border-radius: 12px; }
+.cal-nombre { min-width: 0; cursor: pointer; display: grid; }
+.cal-nombre b { font: 500 16px/1.25 var(--font-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-nombre span { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cal-pista {
+  position: relative; height: 22px; cursor: pointer;
+  background-image: linear-gradient(90deg, var(--rule) 1px, transparent 1px); background-size: calc(100% / var(--n)) 100%;
+}
+.cal-barra { position: absolute; top: 5px; bottom: 5px; min-width: 6px; border-radius: 4px; background: var(--w, var(--muted)); }
+.cal-barra.urg { --w: var(--urg); }
+.cal-barra.ya { --w: var(--ya); }
+.cal-barra.punto { --w: var(--punto); }
+.cal-barra.guardar { --w: var(--guardar); }
+.cal-barra.desde-antes { border-radius: 0 4px 4px 0; }
+.cal-barra.abierta { border-radius: 4px 0 0 4px; -webkit-mask-image: linear-gradient(90deg, #000 60%, transparent); mask-image: linear-gradient(90deg, #000 60%, transparent); }
+.cal-hoy { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; border-radius: 2px; background: var(--ink); }
+.cal-nota { position: absolute; left: 16px; top: 50%; translate: 0 -50%; font-size: 11.5px; color: var(--urg); font-weight: 600; background: var(--raised); padding: 0 4px; }
+.cal-sin { margin-top: 14px; font-size: 19px; }
+#lista.calendario .wine.cal-fila.sin { grid-template-columns: minmax(0, 1fr); }
+
+@media (max-width: 699px) {
+  .cal { --col: minmax(0, 1fr); }
+  .cal-cab { grid-template-columns: minmax(0, 1fr); top: calc(env(safe-area-inset-top, 0px) + 150px); }
+  .cal-cab > span:first-child { display: none; }
+  #lista.calendario .wine.cal-fila { grid-template-columns: minmax(0, 1fr); gap: 5px; padding: 8px 12px 10px; }
+  .cal-nombre { display: flex; align-items: baseline; gap: 8px; }
+  .cal-nombre span { flex: none; }
+  .cal-pista { height: 16px; }
+  .cal-barra { top: 3px; bottom: 3px; }
+  .barras li { grid-template-columns: minmax(0, 7.5em) minmax(0, 1fr) 2.4ch; }
+  #dlg-estadisticas { max-height: calc(100dvh - 16px); }
+}

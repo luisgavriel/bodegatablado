@@ -119,3 +119,21 @@ python3 -m http.server 8000
 ```
 
 y abre http://localhost:8000. Sin `config.js` rellenado funciona en modo demo.
+
+## Ubicación, diario, lista de la compra y sumiller
+
+Aplica en Supabase (*SQL Editor*) `supabase/ubicacion.sql` y `supabase/consumos.sql`, y despliega las funciones
+`buscar-puntuaciones` (actualizada) y `recomendar` (nueva, usa el mismo secreto `ANTHROPIC_API_KEY`).
+
+- **Dónde está**: cada vino de la bodega tiene un campo de ubicación (botellero, fila, caja) que se ve en la ficha y se puede buscar.
+- **Duplicados**: al añadir un vino con el mismo nombre y añada que otro de la bodega, la app ofrece sumar botellas.
+- **Diario**: «−» y *Abrir una* restan una botella y la apuntan con la fecha de hoy en la tabla `consumos`. El aviso trae
+  *Anotar* (ocasión, nota y comentario) y *Deshacer*. «+» y el contador del formulario corrigen el número sin apuntar nada.
+- **Precio y valor**: todos los vinos tienen precio por botella; se busca solo al guardar y con ⋯ → *Buscar los precios que faltan*.
+  El resumen suma el valor aproximado de la bodega.
+- **Por comprar**: tercera pestaña (`lista = 'comprar'`) con precio y enlace a la tienda. *Lo quiero* copia un probado a la lista
+  y *Ya lo compré* lo pasa a la bodega. `comprar-iniciales.json` trae las 8 sugerencias del artefacto original.
+- **¿Qué abro hoy?**: Claude propone tres vinos de la bodega para una comida u ocasión (función `recomendar`).
+- **Estadísticas**: botellas por tipo, país, uva y añada, botellas abiertas por mes y el diario completo.
+- **Calendario de consumo**: tercera vista de la bodega, con la ventana de cada vino sobre un eje de años.
+- **Gestos en el móvil**: deslizar una fila a la izquierda abre una botella; a la derecha, la edita.

@@ -56,6 +56,8 @@
             <div class="menu-sec">
               <p class="menu-tit">Bodega</p>
               <button type="button" id="btn-compartir"><svg aria-hidden="true"><use href="#i-compartir"/></svg>Compartir bodega</button>
+              <button type="button" id="btn-menu-sumiller"><svg aria-hidden="true"><use href="#i-chispa"/></svg>¿Qué abro hoy?</button>
+              <button type="button" id="btn-menu-estadisticas"><svg aria-hidden="true"><use href="#i-grafico"/></svg>Estadísticas y diario</button>
               <button type="button" id="btn-precios"><svg aria-hidden="true"><use href="#i-bolsa"/></svg>Buscar los precios que faltan</button>
             </div>
             <div class="menu-sec">
@@ -134,6 +136,7 @@
           <div class="vistas" role="group" aria-label="Vista">
             <button class="vista" type="button" data-vista="lista" aria-pressed="true" aria-label="Lista" title="Lista"><svg aria-hidden="true"><use href="#i-lista"/></svg></button>
             <button class="vista" type="button" data-vista="galeria" aria-pressed="false" aria-label="Galería" title="Galería"><svg aria-hidden="true"><use href="#i-galeria"/></svg></button>
+            <button class="vista" type="button" data-vista="calendario" data-solo="bodega" aria-pressed="false" aria-label="Calendario de consumo" title="Calendario de consumo"><svg aria-hidden="true"><use href="#i-calendario"/></svg></button>
           </div>
           <label class="orden">
             <svg aria-hidden="true"><use href="#i-orden"/></svg>
@@ -273,6 +276,37 @@
         <span class="sp"></span>
         <button class="btn ghost" type="button" id="btn-cerrar-compartir">Cerrar</button>
       </div>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-sumiller">
+    <form class="compartir" id="form-sumiller">
+      <h2>¿Qué abro hoy?</h2>
+      <p class="meta">Cuéntame qué vas a comer o qué te apetece y te propongo tres vinos de tu bodega, empezando por los que conviene beber pronto.</p>
+      <div class="ideas" id="sumiller-ideas">
+        <button class="chip" type="button">Carne a la brasa</button>
+        <button class="chip" type="button">Pescado o marisco</button>
+        <button class="chip" type="button">Aperitivo con amigos</button>
+        <button class="chip" type="button">Una celebración</button>
+        <button class="chip" type="button">Algo ligero entre semana</button>
+      </div>
+      <textarea name="pregunta" rows="2" placeholder="P. ej. cordero asado con mis padres" aria-label="Qué vas a comer o qué te apetece"></textarea>
+      <div id="sumiller-res" role="status"></div>
+      <div class="dlg-acciones">
+        <span class="sp"></span>
+        <button class="btn ghost" type="button" id="btn-cerrar-sumiller">Cerrar</button>
+        <button class="btn primary" type="submit" id="btn-proponer"><svg aria-hidden="true"><use href="#i-chispa"/></svg>Proponer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-estadisticas">
+    <div class="compartir estadisticas">
+      <div class="est-cab">
+        <h2>Estadísticas</h2>
+        <button class="btn ghost icono" type="button" id="btn-cerrar-estadisticas" aria-label="Cerrar"><svg aria-hidden="true"><use href="#i-cerrar"/></svg></button>
+      </div>
+      <div id="estadisticas"></div>
     </div>
   </dialog>
 

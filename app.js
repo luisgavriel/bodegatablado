@@ -46,7 +46,7 @@ const buscandoNotas = new Set();
 // Lista o galería. Se recuerda en este navegador; sin preferencia, galería
 // en pantallas anchas y lista en el móvil.
 let vista = (() => {
-  try { const v = localStorage.getItem("bodega-vista"); if (v === "lista" || v === "galeria") return v; } catch {}
+  try { const v = localStorage.getItem("bodega-vista"); if (v === "lista" || v === "galeria" || v === "calendario") return v; } catch {}
   return window.matchMedia("(min-width: 900px)").matches ? "galeria" : "lista";
 })();
 // Resumen plegado o abierto en el móvil. Se recuerda en este navegador;
@@ -54,10 +54,16 @@ let vista = (() => {
 let resumenAbierto = (() => {
   try { return localStorage.getItem("bodega-resumen") === "abierto"; } catch { return false; }
 })();
+// El calendario de consumo solo existe en la bodega.
+const vistaReal = () => (vista === "calendario" && pestana !== "bodega" ? "lista" : vista);
 let acceso = { rol: "dueno" };
 const soloVer = () => acceso.rol === "lector";
 
 const toastEl = $("#toast");
+// Cada panel apunta cuándo se abrió, para saber cuál está encima.
+let turno = 0;
+const showModal = HTMLDialogElement.prototype.showModal;
+HTMLDialogElement.prototype.showModal = function () { this.dataset.turno = ++turno; return showModal.call(this); };
 // Al cerrarse un panel, el aviso que llevaba dentro vuelve a la página.
 for (const d of document.querySelectorAll("dialog")) {
   d.addEventListener("close", () => { if (toastEl.parentNode === d) document.body.append(toastEl); });
@@ -76,7 +82,7 @@ function ponerFicha(html) {
 function toast(msg, fijo = false, acciones = []) {
   const t = toastEl;
   // Con un panel abierto, el aviso va dentro de él: lo de fuera no se puede tocar.
-  const sitio = [...document.querySelectorAll("dialog[open]")].at(-1) ?? document.body;
+  const sitio = [...document.querySelectorAll("dialog[open]")].sort((a, b) => (a.dataset.turno ?? 0) - (b.dataset.turno ?? 0)).at(-1) ?? document.body;
   if (t.parentNode !== sitio) sitio.append(t);
   acciones = acciones.filter(Boolean);
   t.innerHTML = `<span>${esc(msg)}</span>` + acciones.map((a, i) => `<button type="button" data-i="${i}">${esc(a.texto)}</button>`).join("");
@@ -611,7 +617,11 @@ function render() {
       <svg aria-hidden="true"><use href="#i-reloj"/></svg>
       <span class="largo">${pronto === 1 ? "1 vino conviene beberlo" : `${pronto} vinos conviene beberlos`} antes de que acabe ${new Date().getFullYear() + 1}</span>
       <span class="corto">${pronto} para beber pronto</span>
-      <span class="ir">Ver</span></button>` : ""}` : "";
+      <span class="ir">Ver</span></button>` : ""}
+    ${esBodega ? `<div class="atajos">
+      ${enStock.length ? `<button class="atajo principal" type="button" data-atajo="sumiller"><svg aria-hidden="true"><use href="#i-chispa"/></svg>¿Qué abro hoy?</button>` : ""}
+      <button class="atajo" type="button" data-atajo="estadisticas"><svg aria-hidden="true"><use href="#i-grafico"/></svg>Estadísticas</button>
+    </div>` : ""}` : "";
 
   for (const c of document.querySelectorAll("#filtros .chip")) {
     c.querySelector(".num").textContent = actuales.filter((v) => pasaFiltro(v, c.dataset.filter)).length || "";
@@ -628,8 +638,11 @@ function render() {
     visibles.sort((a, b) => (a.botellas === 0) - (b.botellas === 0));
   }
 
+  const vistaAhora = vistaReal();
   let html;
-  if (orden === "tipo") {
+  if (vistaAhora === "calendario") {
+    html = calendarioHtml(visibles);
+  } else if (orden === "tipo") {
     html = TIPOS.map(([t, nombre]) => {
       const grupo = visibles.filter((v) => v.tipo === t);
       if (!grupo.length) return "";
@@ -642,9 +655,213 @@ function render() {
     html = ordenados.length ? `<section class="grupo"><ol class="ledger">${ordenados.map(filaVino).join("")}</ol></section>` : "";
   }
   $("#lista").innerHTML = html || (actuales.length ? sinResultadosHtml() : "");
-  $("#lista").classList.toggle("galeria", vista === "galeria");
-  for (const b of document.querySelectorAll(".vista")) b.setAttribute("aria-pressed", String(b.dataset.vista === vista));
+  $("#lista").classList.toggle("galeria", vistaAhora === "galeria");
+  $("#lista").classList.toggle("calendario", vistaAhora === "calendario");
+  $(".orden").hidden = vistaAhora === "calendario";
+  for (const b of document.querySelectorAll(".vista")) b.setAttribute("aria-pressed", String(b.dataset.vista === vistaAhora));
   if ($("#ficha").open) pintarFicha();
+  if ($("#dlg-estadisticas").open) pintarEstadisticas();
+}
+
+// ---- Calendario de consumo ----
+// Una fila por vino con su ventana sobre un eje de años común, ordenadas
+// por lo que antes se acaba. El eje va del año pasado a dentro de diez.
+function calendarioHtml(lista) {
+  const ahora = new Date();
+  const ano = ahora.getFullYear();
+  const ini = ano - 1, fin = ano + 10, total = fin - ini;
+  const hoy = ano + (ahora - new Date(ano, 0, 1)) / (365.25 * 864e5);
+  const pos = (x) => `${(((Math.min(fin, Math.max(ini, x)) - ini) / total) * 100).toFixed(2)}%`;
+  const filas = lista.filter((v) => v.botellas > 0).map((v) => ({ v, w: leerVentana(v.ventana) }));
+  const con = filas.filter((f) => f.w).sort((a, b) => (a.w.hasta ?? 9999) - (b.w.hasta ?? 9999)
+    || (a.w.desde ?? 0) - (b.w.desde ?? 0) || a.v.nombre.localeCompare(b.v.nombre));
+  const sin = filas.filter((f) => !f.w).sort((a, b) => a.v.nombre.localeCompare(b.v.nombre));
+  if (!filas.length) return "";
+  const anos = Array.from({ length: total }, (_, i) => ini + i);
+  const nombre = (v) => `<div class="cal-nombre" data-ficha><b>${esc(v.nombre)}</b><span>${v.anada ?? "s/a"} · ×${v.botellas}</span></div>`;
+  const fila = ({ v, w }) => {
+    const desde = w.desde ?? v.anada ?? ini;
+    const hasta = w.hasta ?? fin;
+    const pasada = hasta < ini;
+    const estilo = pasada ? "left:0;width:10px" : `left:${pos(desde)};width:calc(${pos(hasta + 1)} - ${pos(desde)})`;
+    const cuando = v.estado ? `${ESTADOS[v.estado]}${v.ventana ? " · " + v.ventana : ""}` : v.ventana;
+    return `<li class="wine cal-fila" data-id="${v.id}">
+      ${nombre(v)}
+      <div class="cal-pista" data-ficha style="--n:${total}" title="${esc(cuando ?? "")}">
+        <span class="cal-barra ${esc(v.estado ?? "")}${w.hasta == null && !pasada ? " abierta" : ""}${desde < ini && !pasada ? " desde-antes" : ""}" style="${estilo}"></span>
+        <span class="cal-hoy" style="left:${pos(hoy)}"></span>
+        ${pasada ? `<span class="cal-nota">acabó en ${hasta}</span>` : ""}
+      </div>
+    </li>`;
+  };
+  return `<section class="grupo cal">
+    <div class="cal-cab" aria-hidden="true"><span></span><div class="cal-anos">${anos.map((a) => `<span${a === ano ? ' class="este"' : ""}>${String(a).slice(2)}</span>`).join("")}</div></div>
+    <ol class="ledger">${con.map(fila).join("")}</ol>
+    ${sin.length ? `<h2 class="cal-sin">Sin ventana <span class="count">${sin.length} ${sin.length === 1 ? "vino" : "vinos"}</span></h2>
+      <ol class="ledger">${sin.map(({ v }) => `<li class="wine cal-fila sin" data-id="${v.id}">${nombre(v)}</li>`).join("")}</ol>` : ""}
+  </section>`;
+}
+
+// ---- ¿Qué abro hoy? ----
+// Sin Claude (modo demo): tres vinos por urgencia, con una pista del tipo
+// según lo que se va a comer.
+function recomendarLocal(pregunta) {
+  const t = plano(pregunta);
+  const tipo = /carne|cordero|asado|brasa|chulet|caza|guiso|queso/.test(t) ? "tinto"
+    : /pescad|marisc|sushi|ensalada|arroz|liger/.test(t) ? "blanco"
+    : /aperitiv|celebr|brind|fiesta|cumple/.test(t) ? "espumoso" : null;
+  const candidatos = vinos.filter((v) => listaDe(v) === "bodega" && v.botellas > 0 && v.estado !== "guardar")
+    .sort((a, b) => (b.tipo === tipo) - (a.tipo === tipo) || (URGENCIA[a.estado] ?? 2) - (URGENCIA[b.estado] ?? 2));
+  const motivos = { urg: "Su ventana ya ha pasado: mejor abrirlo cuanto antes.", ya: "Conviene beberlo pronto.", punto: "Está en su punto." };
+  return {
+    comentario: "Modo demo: elegidos por urgencia, sin Claude.",
+    recomendaciones: candidatos.slice(0, 3).map((v) => ({ vino_id: v.id, motivo: motivos[v.estado] ?? "Listo para beber.", servicio: "" })),
+  };
+}
+
+function abrirSumiller() {
+  $("#sumiller-res").innerHTML = "";
+  $("#dlg-sumiller").showModal();
+}
+
+async function proponer(e) {
+  e.preventDefault();
+  const pregunta = $("#form-sumiller").elements.pregunta.value.trim();
+  const res = $("#sumiller-res");
+  const boton = $("#btn-proponer");
+  boton.disabled = true;
+  res.innerHTML = `<p class="meta">${store.sumiller ? "Claude está mirando tu bodega… (unos segundos)" : "Pensando…"}</p>`;
+  try {
+    const { comentario, recomendaciones } = store.sumiller ? await store.sumiller.recomendar(pregunta) : recomendarLocal(pregunta);
+    const filas = recomendaciones.map((r) => ({ r, v: vinos.find((x) => x.id === r.vino_id) })).filter((f) => f.v);
+    res.innerHTML = (comentario ? `<p class="rec-comentario">${esc(comentario)}</p>` : "")
+      + (filas.length ? `<ol class="recs">${filas.map(({ r, v }, i) => `<li><button type="button" class="rec" data-id="${v.id}">
+          <span class="foto ${esc(v.tipo)}">${imagen(v)}</span>
+          <span class="rec-txt">
+            <span class="rec-num">${i + 1}</span>
+            <b>${esc(v.nombre)}<span class="anada">${v.anada ?? "s/a"}</span></b>
+            <span class="motivo">${esc(r.motivo)}</span>
+            ${r.servicio ? `<span class="servicio">${esc(r.servicio)}</span>` : ""}
+          </span>
+        </button></li>`).join("")}</ol>` : `<p class="meta">No he encontrado nada que proponer.</p>`);
+  } catch (err) {
+    res.innerHTML = `<p class="meta">No se pudo proponer: ${esc(err.message || err)}</p>`;
+  } finally {
+    boton.disabled = false;
+  }
+}
+
+// ---- Estadísticas ----
+// Suma un peso por clave y devuelve [clave, total] de mayor a menor.
+function sumarPor(lista, claves, peso) {
+  const m = new Map();
+  for (const x of lista) for (const k of [claves(x)].flat()) if (k) m.set(k, (m.get(k) ?? 0) + peso(x));
+  return [...m].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])));
+}
+
+// Uvas de un vino: «Merlot 75 %, Cabernet Sauvignon 25 %» → dos uvas. Se
+// descartan las frases que no son una variedad («12 meses en barrica»).
+function uvasDe(v) {
+  return [...new Set(String(v.uvas ?? "").replace(/\(.*?\)/g, " ").split(/,|·|;|\/|\s+y\s+/)
+    .map((s) => s.replace(/\d+([,.]\d+)?\s*%/g, "").replace(/\s+(mayoritario|con\s|vinificado|y otras|base).*$/i, "").trim())
+    .filter((s) => /^\p{Lu}/u.test(s) && s.length <= 26 && !/^(coupage|otras|crianza)/i.test(s)))];
+}
+
+// Barras horizontales: una por categoría, con su cifra a la derecha.
+function barrasHtml(pares, { max = 8, clase = () => "", unidad = ["botella", "botellas"], otros = true } = {}) {
+  if (!pares.length) return `<p class="meta">Sin datos todavía.</p>`;
+  const vistas = pares.slice(0, max);
+  const resto = pares.slice(max).reduce((s, [, n]) => s + n, 0);
+  if (resto && otros) vistas.push([`Otros (${pares.length - max})`, resto]);
+  const tope = Math.max(...vistas.map(([, n]) => n));
+  return `<ul class="barras">${vistas.map(([k, n]) => `<li title="${esc(k)}: ${n} ${n === 1 ? unidad[0] : unidad[1]}">
+    <span class="lbl">${esc(k)}</span>
+    <span class="pista"><span class="barra ${clase(k)}" style="width:${((n / tope) * 100).toFixed(1)}%"></span></span>
+    <b>${n}</b></li>`).join("")}</ul>`;
+}
+
+// Columnas: una por año o por mes, con la cifra encima.
+function columnasHtml(pares, unidad = ["botella", "botellas"]) {
+  const tope = Math.max(1, ...pares.map(([, n]) => n));
+  return `<div class="columnas" style="--n:${pares.length}">${pares.map(([k, n, titulo]) => `<div class="col" title="${esc(titulo ?? k)}: ${n} ${n === 1 ? unidad[0] : unidad[1]}">
+    <b>${n || ""}</b><span class="barra${n ? "" : " cero"}" style="height:${n ? Math.max(4, (n / tope) * 100).toFixed(1) : 0}%"></span><span class="lbl">${esc(k)}</span></div>`).join("")}</div>`;
+}
+
+function pintarEstadisticas() {
+  const bodega = vinos.filter((v) => listaDe(v) === "bodega" && v.botellas > 0);
+  const nBotellas = bodega.reduce((s, v) => s + v.botellas, 0);
+  const valor = bodega.reduce((s, v) => s + (Number(v.precio) || 0) * v.botellas, 0);
+  const ano = new Date().getFullYear();
+  const esteAno = consumos.filter((c) => String(c.fecha).startsWith(String(ano)));
+  const notas = consumos.filter((c) => c.nota != null).map((c) => Number(c.nota));
+  const media = notas.length ? notas.reduce((a, b) => a + b, 0) / notas.length : null;
+  const dato = (valorTxt, etiqueta) => `<div class="dato"><b>${valorTxt}</b><span>${etiqueta}</span></div>`;
+  const peso = (v) => v.botellas;
+  const nombreTipo = Object.fromEntries(TIPOS);
+  const porTipo = sumarPor(bodega, (v) => v.tipo, peso);
+  // Añadas: una columna por año entre la más vieja y la más joven (con
+  // huecos a cero) si caben; si no, solo los años que hay.
+  const porAnada = new Map(sumarPor(bodega.filter((v) => v.anada), (v) => v.anada, peso));
+  const anos = [...porAnada.keys()].sort((a, b) => a - b);
+  const seguidos = anos.length && anos.at(-1) - anos[0] < 16
+    ? Array.from({ length: anos.at(-1) - anos[0] + 1 }, (_, i) => anos[0] + i) : anos;
+  const sinAnada = bodega.filter((v) => !v.anada).reduce((s, v) => s + v.botellas, 0);
+  // Botellas abiertas en los últimos doce meses.
+  const meses = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(ano, new Date().getMonth() - 11 + i, 1);
+    const clave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return [d.toLocaleDateString("es-ES", { month: "short" }).replace(".", ""), consumos.filter((c) => String(c.fecha).startsWith(clave)).length,
+      d.toLocaleDateString("es-ES", { month: "long", year: "numeric" })];
+  });
+  const bloque = (titulo, cuerpo, nota = "") => `<section class="est-bloque"><h3>${titulo}</h3>${cuerpo}${nota ? `<p class="meta">${nota}</p>` : ""}</section>`;
+  $("#estadisticas").innerHTML = `
+    <div class="datos">
+      ${dato(nBotellas, nBotellas === 1 ? "botella" : "botellas")}
+      ${dato(bodega.length, bodega.length === 1 ? "vino" : "vinos")}
+      ${valor ? dato(euros(valor), "valor aproximado") : ""}
+      ${dato(esteAno.length, `${esteAno.length === 1 ? "abierta" : "abiertas"} en ${ano}`)}
+      ${media != null ? dato(cifra(Math.round(media * 10) / 10), "nota media de lo abierto") : ""}
+    </div>
+    <div class="est-rejilla">
+      ${bloque("Por tipo", barrasHtml(porTipo.map(([t, n]) => [nombreTipo[t] ?? t, n, t]), { clase: (k) => porTipo.find(([t]) => (nombreTipo[t] ?? t) === k)?.[0] ?? "" }))}
+      ${bloque("Cuándo beber", barrasHtml(Object.keys(ESTADOS).map((e) => [ESTADOS[e], bodega.filter((v) => v.estado === e).reduce((s, v) => s + v.botellas, 0)]).filter(([, n]) => n),
+        { clase: (k) => "e-" + Object.keys(ESTADOS).find((e) => ESTADOS[e] === k) }))}
+      ${bloque("Por país", barrasHtml(sumarPor(bodega, (v) => v.pais, peso), { max: 7 }))}
+      ${bloque("Por uva", barrasHtml(sumarPor(bodega, uvasDe, peso), { max: 8, otros: false }), "Las ocho uvas con más botellas. Un vino con varias uvas cuenta en cada una.")}
+    </div>
+    ${bloque("Por añada", seguidos.length ? columnasHtml(seguidos.map((a) => [`'${String(a).slice(2)}`, porAnada.get(a) ?? 0, String(a)])) : `<p class="meta">Sin datos todavía.</p>`,
+      sinAnada ? `Además, ${sinAnada} ${sinAnada === 1 ? "botella" : "botellas"} sin añada.` : "")}
+    ${bloque("Botellas abiertas, últimos 12 meses", consumos.length ? columnasHtml(meses, ["botella abierta", "botellas abiertas"])
+      : `<p class="meta">Todavía no has abierto ninguna botella desde la app. Cada vez que pulses «−» o «Abrir una» se apunta aquí.</p>`)}
+    ${consumos.length ? bloque("Diario", `<ul class="diario">${consumos.slice(0, 30).map((c) => consumoHtml(c, true)).join("")}</ul>`,
+      consumos.length > 30 ? `Se ven las 30 últimas de ${consumos.length}.` : "") : ""}`;
+}
+
+function abrirEstadisticas() {
+  pintarEstadisticas();
+  $("#dlg-estadisticas").showModal();
+}
+
+function enlazarSumillerYEstadisticas() {
+  $("#btn-menu-sumiller").addEventListener("click", abrirSumiller);
+  $("#btn-menu-estadisticas").addEventListener("click", abrirEstadisticas);
+  $("#form-sumiller").addEventListener("submit", proponer);
+  $("#btn-cerrar-sumiller").addEventListener("click", () => $("#dlg-sumiller").close());
+  $("#sumiller-ideas").addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip");
+    if (!chip) return;
+    $("#form-sumiller").elements.pregunta.value = chip.textContent;
+    $("#form-sumiller").requestSubmit();
+  });
+  $("#sumiller-res").addEventListener("click", (e) => {
+    const v = vinos.find((x) => x.id === e.target.closest(".rec")?.dataset.id);
+    if (v) abrirFicha(v);
+  });
+  $("#btn-cerrar-estadisticas").addEventListener("click", () => $("#dlg-estadisticas").close());
+  $("#estadisticas").addEventListener("click", (e) => {
+    const c = consumos.find((x) => x.id === e.target.closest("[data-consumo]")?.dataset.consumo);
+    if (c) abrirConsumo(c);
+  });
 }
 
 // Aviso cuando ningún vino pasa el filtro y la búsqueda, con lo que se
@@ -1226,7 +1443,7 @@ function enlazarGestos() {
   let g = null;
   lista.addEventListener("touchstart", (e) => {
     g = null;
-    if (vista !== "lista" || soloVer() || e.touches.length !== 1) return;
+    if (vistaReal() !== "lista" || soloVer() || e.touches.length !== 1) return;
     const fila = e.target.closest(".wine");
     if (!fila || e.target.closest(".stock")) return;
     const v = vinos.find((x) => x.id === fila.dataset.id);
@@ -1543,6 +1760,8 @@ function enlazar() {
       try { localStorage.setItem("bodega-resumen", resumenAbierto ? "abierto" : "plegado"); } catch {}
       return render();
     }
+    const atajo = e.target.closest("[data-atajo]")?.dataset.atajo;
+    if (atajo) return atajo === "sumiller" ? abrirSumiller() : abrirEstadisticas();
     const tipo = e.target.closest("[data-tipo]")?.dataset.tipo;
     if (tipo) elegirFiltro(filtro === tipo ? "todo" : tipo);
     else if (e.target.closest("#btn-pronto")) elegirFiltro("ya");
@@ -1602,6 +1821,7 @@ function enlazar() {
     const linea = e.target.closest("[data-consumo]");
     if (linea) { const c = consumos.find((x) => x.id === linea.dataset.consumo); if (c) abrirConsumo(c); }
   });
+  enlazarSumillerYEstadisticas();
   $("#form-consumo").addEventListener("submit", guardarConsumo);
   $("#btn-cancelar-consumo").addEventListener("click", () => $("#dlg-consumo").close());
   $("#btn-borrar-consumo").addEventListener("click", borrarConsumo);

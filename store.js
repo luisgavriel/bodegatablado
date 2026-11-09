@@ -148,6 +148,10 @@ async function crearStoreSupabase() {
     puntuaciones: {
       buscar(id, solo) { return invocar("buscar-puntuaciones", { vino_id: id, solo }); },
     },
+    // «¿Qué abro hoy?»: { comentario, recomendaciones: [{ vino_id, motivo, servicio }] }.
+    sumiller: {
+      recomendar(pregunta) { return invocar("recomendar", { pregunta, dueno: acceso.dueno }); },
+    },
     // Lee la foto de una etiqueta con Claude: { vino: {...campos}, aviso }.
     etiqueta: {
       async leer(blob) {
