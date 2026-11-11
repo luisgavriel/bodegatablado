@@ -44,11 +44,11 @@ const ESQUEMA = {
       items: {
         type: "object",
         properties: {
-          vino_id: { type: "string", description: "El id del vino, copiado de la lista" },
+          numero: { type: "integer", description: "El número del vino, copiado de la lista" },
           motivo: { type: "string", description: "Por qué este vino para esta ocasión, en una o dos frases" },
           servicio: { type: "string", description: "Temperatura y si conviene abrirlo antes o decantarlo, en una frase corta" },
         },
-        required: ["vino_id", "motivo", "servicio"],
+        required: ["numero", "motivo", "servicio"],
         additionalProperties: false,
       },
     },
@@ -95,24 +95,29 @@ Deno.serve(async (req) => {
     const { data: abiertas } = await usuario.from("consumos").select("nombre, anada, fecha, nota")
       .eq("user_id", bodega).order("fecha", { ascending: false }).limit(12);
 
-    const lista = vinos.map((v) => ({
-      id: v.id, nombre: v.nombre, bodega: v.bodega, anada: v.anada, tipo: v.tipo, denominacion: v.denominacion,
-      pais: v.pais, uvas: v.uvas, estado: v.estado, ventana: v.ventana, botellas: v.botellas,
-      puntuacion: v.puntuacion, cata: v.cata ? String(v.cata).slice(0, 240) : null, notas: v.notas ? String(v.notas).slice(0, 160) : null,
-    }));
+    // Lista compacta para gastar menos tokens: una línea por vino, con un
+    // número corto en vez del id y sin repetir el nombre de cada campo.
+    const campo = (x: unknown, max = 200) => String(x ?? "").replace(/[\s|]+/g, " ").trim().slice(0, max);
+    const lista = vinos.map((v, i) => [i + 1, campo(v.nombre), campo(v.bodega), v.anada ?? "", campo(v.tipo),
+      campo(v.denominacion), campo(v.pais), campo(v.uvas), campo(v.estado), campo(v.ventana), v.botellas,
+      campo(v.cata, 240), campo(v.notas, 160)].join("|")).join("\n");
+    const recientes = (abiertas ?? []).map((a) =>
+      `${a.fecha}: ${campo(a.nombre)}${a.anada ? ` ${a.anada}` : ""}${a.nota != null ? ` (nota ${a.nota})` : ""}`).join("\n");
 
     const claude = new Anthropic({ timeout: 60_000, maxRetries: 1 }); // lee ANTHROPIC_API_KEY
     const mensaje = await claude.beta.messages.create({
-      model: "claude-opus-5-5",
+      model: "claude-sonnet-5-5",
       max_tokens: 4000,
-      // Si Opus rechaza la petición, la API la repite con el modelo que recomienda.
+      // Si el modelo rechaza la petición, la API la repite con el modelo que recomienda.
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       system: SISTEMA,
-      output_config: { format: { type: "json_schema", schema: ESQUEMA } },
+      // La tarea es sencilla: con poco razonamiento basta y sale más barato.
+      output_config: { effort: "low", format: { type: "json_schema", schema: ESQUEMA } },
       messages: [{
         role: "user",
-        content: `Vinos en la bodega:\n${JSON.stringify(lista)}\n\nAbiertos hace poco:\n${JSON.stringify(abiertas ?? [])}\n\n`
+        content: "Vinos en la bodega (número|nombre|bodega|añada|tipo|denominación|país|uvas|estado|ventana|botellas|cata|notas):\n"
+          + `${lista}\n\nAbiertos hace poco:\n${recientes || "(nada apuntado)"}\n\n`
           + `Qué voy a comer o qué me apetece: ${texto || "(no lo digo: propón lo que más convenga abrir ahora)"}`,
       }],
     });
@@ -123,10 +128,11 @@ Deno.serve(async (req) => {
     if (!bloque || bloque.type !== "text") return respuesta({ error: "Claude no ha devuelto datos" }, 502);
     const datos = JSON.parse(bloque.text);
     // Solo vinos que existen en la bodega, sin repetir.
-    const ids = new Set(vinos.map((v) => v.id));
     const vistos = new Set<string>();
-    const recomendaciones = (datos.recomendaciones ?? []).filter((r: { vino_id: string }) =>
-      ids.has(r.vino_id) && !vistos.has(r.vino_id) && vistos.add(r.vino_id)).slice(0, 3);
+    const recomendaciones = (datos.recomendaciones ?? [])
+      .map((r: { numero: number; motivo: string; servicio: string }) =>
+        ({ vino_id: vinos[r.numero - 1]?.id, motivo: r.motivo, servicio: r.servicio }))
+      .filter((r: { vino_id?: string }) => r.vino_id && !vistos.has(r.vino_id) && vistos.add(r.vino_id)).slice(0, 3);
     return respuesta({ comentario: String(datos.comentario ?? ""), recomendaciones });
   } catch (e) {
     console.error(e);
